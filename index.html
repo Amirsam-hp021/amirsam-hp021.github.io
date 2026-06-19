@@ -1302,6 +1302,11 @@
     }
 
     @media (max-width: 760px) {
+      /* compress the cinematic intro on phones: ~3 swipes instead of ~6 */
+      #scroll-space {
+        height: 320vh;
+      }
+
       .proj-grid {
         grid-template-columns: 1fr;
       }
@@ -2484,12 +2489,10 @@
       syncCaret();
 
       /* ---------- INIT ---------- */
-      // Skip the heavy cinematic scroll for users who ask for reduced motion
-      // (or coarse-pointer phones) and drop straight into the portfolio.
+      // Only users who explicitly ask for reduced motion skip the intro entirely.
+      // Phones still get it, just shorter (#scroll-space is compressed via CSS).
       const prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const tinyScreen = window.matchMedia('(max-width: 600px)').matches &&
-        window.matchMedia('(pointer: coarse)').matches;
-      const staticMode = prefersReduce || tinyScreen;
+      const staticMode = prefersReduce;
 
       if (staticMode) {
         document.documentElement.classList.add('static-mode');
