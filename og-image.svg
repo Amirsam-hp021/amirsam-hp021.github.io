@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06090a"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.25" r="0.7">
+      <stop offset="0" stop-color="#00ff41" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#00ff41" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- scanlines -->
+  <g opacity="0.06" fill="#ffffff">
+    <rect width="1200" height="2" y="0"/>
+    <rect width="1200" height="2" y="6"/>
+    <rect width="1200" height="2" y="12"/>
+  </g>
+
+  <!-- prompt -->
+  <text x="90" y="150" font-family="'Share Tech Mono', monospace" font-size="34" fill="#3a8f4f">amirsam@portfolio:~$ whoami</text>
+
+  <!-- name -->
+  <text x="86" y="320" font-family="Arial, 'Rajdhani', sans-serif" font-size="150" font-weight="900" fill="#ffffff" letter-spacing="-2">I BUILD</text>
+  <text x="86" y="470" font-family="Arial, 'Rajdhani', sans-serif" font-size="150" font-weight="900" fill="#00ff41" letter-spacing="-2">BACKENDS.</text>
+
+  <!-- subtitle -->
+  <text x="92" y="545" font-family="'Share Tech Mono', monospace" font-size="30" fill="#b9c4bd" letter-spacing="4">AMIRSAM · FULL-STACK DEVELOPER</text>
+
+  <!-- tags -->
+  <text x="92" y="595" font-family="'Share Tech Mono', monospace" font-size="24" fill="#6f7d74">Node.js · React · MongoDB · Python/ML · Yerevan / Remote</text>
+
+  <!-- terminal mark -->
+  <g transform="translate(1010,70)">
+    <rect width="110" height="110" rx="22" fill="#0a0c0b" stroke="#1f3a29" stroke-width="2"/>
+    <text x="22" y="78" font-family="'Share Tech Mono', monospace" font-size="64" font-weight="bold" fill="#00ff41">&gt;_</text>
+  </g>
+</svg>
