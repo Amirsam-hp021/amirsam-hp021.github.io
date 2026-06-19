@@ -2070,8 +2070,9 @@
           };
           const name = (arg || '').toLowerCase();
           if (!name) {
-            out('usage: <span class="cmd">theme</span> <span class="val">&lt;name&gt;</span>', 'echo');
+            out('usage: <span class="cmd">theme amber</span> <span class="echo">(name on the same line)</span>', 'echo');
             out('themes: <span class="accent">' + Object.keys(themes).join(' · ') + '</span>');
+            out('tip: you can also just type <span class="cmd">amber</span>, <span class="cmd">cyan</span>, <span class="cmd">gold</span> or <span class="cmd">red</span>', 'echo');
             return;
           }
           if (!themes[name]) {
@@ -2105,6 +2106,10 @@
       COMMANDS.ip = COMMANDS.trace;
       COMMANDS.visitor = COMMANDS.trace;
       COMMANDS['whoami-me'] = COMMANDS.trace;
+      // let color names work as standalone commands too (skip 'matrix' — that's the rain)
+      ['amber', 'cyan', 'gold', 'red', 'green'].forEach(function (c) {
+        COMMANDS[c] = function () { COMMANDS.theme(c); };
+      });
 
       /* ---- VISITOR TRACE: client fingerprint + IP geo + VPN/proxy heuristic ----
          The browser can't read its own public IP, so we ask a free no-key API
