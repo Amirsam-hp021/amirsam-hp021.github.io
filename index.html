@@ -39,6 +39,7 @@
   <style>
     :root {
       --green: #00ff41;
+      --green-rgb: 0, 255, 65;
       --cyan: #00e5ff;
       --yellow: #ffcc00;
       --pink: #ff79c6;
@@ -121,7 +122,7 @@
     #boot-log {
       font-size: clamp(12px, 1.5vw, 16px);
       line-height: 1.85;
-      text-shadow: 0 0 8px rgba(0, 255, 65, 0.25);
+      text-shadow: 0 0 8px rgba(var(--green-rgb), 0.25);
     }
 
     #boot-log .ok {
@@ -258,7 +259,7 @@
       box-shadow:
         0 0 0 1px rgba(255, 255, 255, 0.04),
         0 40px 80px rgba(0, 0, 0, 0.8),
-        0 0 120px rgba(0, 255, 65, 0.12);
+        0 0 120px rgba(var(--green-rgb), 0.12);
       will-change: transform;
     }
 
@@ -273,7 +274,7 @@
       height: 7px;
       border-radius: 50%;
       background: #2c2f31;
-      box-shadow: inset 0 0 2px #000, 0 0 1px rgba(0, 255, 65, 0.4);
+      box-shadow: inset 0 0 2px #000, 0 0 1px rgba(var(--green-rgb), 0.4);
     }
 
     /* thin chin */
@@ -296,7 +297,7 @@
       left: 10%;
       width: 80%;
       height: 70px;
-      background: radial-gradient(ellipse at center, rgba(0, 255, 65, 0.45), transparent 70%);
+      background: radial-gradient(ellipse at center, rgba(var(--green-rgb), 0.45), transparent 70%);
       filter: blur(22px);
       z-index: -1;
     }
@@ -308,7 +309,7 @@
       background: #050807;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: inset 0 0 60px rgba(0, 255, 65, 0.05), inset 0 0 0 1px rgba(0, 255, 65, 0.08);
+      box-shadow: inset 0 0 60px rgba(var(--green-rgb), 0.05), inset 0 0 0 1px rgba(var(--green-rgb), 0.08);
       display: flex;
       flex-direction: column;
     }
@@ -322,7 +323,7 @@
       z-index: 3;
       background:
         repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0px, rgba(0, 0, 0, 0.18) 1px, transparent 2px, transparent 3px),
-        linear-gradient(rgba(0, 255, 65, 0.04), rgba(0, 255, 65, 0));
+        linear-gradient(rgba(var(--green-rgb), 0.04), rgba(var(--green-rgb), 0));
       background-size: 100% 3px, 100% 100%;
       mix-blend-mode: overlay;
       animation: crtSweep 6s linear infinite;
@@ -431,7 +432,7 @@
 
     .hero h1 .green {
       color: var(--green);
-      text-shadow: 0 0 40px rgba(0, 255, 65, 0.4);
+      text-shadow: 0 0 40px rgba(var(--green-rgb), 0.4);
     }
 
     .hero .subtitle {
@@ -479,7 +480,7 @@
     }
 
     .btn.primary:hover {
-      box-shadow: 0 0 30px rgba(0, 255, 65, 0.6);
+      box-shadow: 0 0 30px rgba(var(--green-rgb), 0.6);
       transform: translateY(-2px);
     }
 
@@ -490,7 +491,7 @@
 
     .btn.ghost:hover {
       border-color: var(--green);
-      background: rgba(0, 255, 65, 0.07);
+      background: rgba(var(--green-rgb), 0.07);
     }
 
     .status-pill {
@@ -582,7 +583,7 @@
 
     #sound-toggle:hover {
       border-color: var(--green);
-      box-shadow: 0 0 16px rgba(0, 255, 65, 0.25);
+      box-shadow: 0 0 16px rgba(var(--green-rgb), 0.25);
     }
 
     /* on-demand matrix overlay (the `matrix` command) */
@@ -615,7 +616,7 @@
       color: var(--green);
       font-size: clamp(16px, 3vw, 30px);
       letter-spacing: 4px;
-      text-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+      text-shadow: 0 0 20px rgba(var(--green-rgb), 0.6);
     }
 
     /* section heading */
@@ -678,11 +679,11 @@
       font-weight: bold;
       color: var(--green);
       background:
-        radial-gradient(120% 120% at 30% 20%, rgba(0, 255, 65, 0.14), transparent 60%),
+        radial-gradient(120% 120% at 30% 20%, rgba(var(--green-rgb), 0.14), transparent 60%),
         #0a0c0b;
       border: 1px solid #1f3a29;
-      box-shadow: inset 0 0 50px rgba(0, 255, 65, 0.06), 0 20px 50px rgba(0, 0, 0, 0.5);
-      text-shadow: 0 0 30px rgba(0, 255, 65, 0.4);
+      box-shadow: inset 0 0 50px rgba(var(--green-rgb), 0.06), 0 20px 50px rgba(0, 0, 0, 0.5);
+      text-shadow: 0 0 30px rgba(var(--green-rgb), 0.4);
     }
 
     .about-loc {
@@ -760,7 +761,7 @@
       height: 12px;
       border-radius: 50%;
       background: var(--green);
-      box-shadow: 0 0 12px rgba(0, 255, 65, 0.6);
+      box-shadow: 0 0 12px rgba(var(--green-rgb), 0.6);
     }
 
     .tl-when {
@@ -819,7 +820,7 @@
       font-weight: bold;
       color: var(--green);
       letter-spacing: 2px;
-      text-shadow: 0 0 18px rgba(0, 255, 65, 0.4);
+      text-shadow: 0 0 18px rgba(var(--green-rgb), 0.4);
       z-index: 1;
     }
 
@@ -859,7 +860,7 @@
     }
 
     .thumb-clin {
-      background: radial-gradient(130% 130% at 70% 70%, rgba(0, 255, 65, 0.1), transparent 55%), #060908;
+      background: radial-gradient(130% 130% at 70% 70%, rgba(var(--green-rgb), 0.1), transparent 55%), #060908;
     }
 
     .thumb-v2 {
@@ -916,7 +917,7 @@
     .contact-form textarea:focus {
       outline: none;
       border-color: var(--green);
-      box-shadow: 0 0 0 3px rgba(0, 255, 65, 0.1);
+      box-shadow: 0 0 0 3px rgba(var(--green-rgb), 0.1);
     }
 
     .form-foot {
@@ -966,7 +967,7 @@
       border-left-color: var(--green);
       background: #0c100e;
       transform: translateX(4px);
-      box-shadow: -6px 0 30px rgba(0, 255, 65, 0.07);
+      box-shadow: -6px 0 30px rgba(var(--green-rgb), 0.07);
     }
 
     .card .idx {
@@ -989,7 +990,7 @@
     .live-link {
       color: var(--green);
       margin-left: 6px;
-      text-shadow: 0 0 10px rgba(0, 255, 65, 0.35);
+      text-shadow: 0 0 10px rgba(var(--green-rgb), 0.35);
     }
 
     .card h3 {
@@ -1055,7 +1056,7 @@
       height: 100%;
       width: 0;
       background: linear-gradient(90deg, #0a8f33, var(--green));
-      box-shadow: 0 0 12px rgba(0, 255, 65, 0.5);
+      box-shadow: 0 0 12px rgba(var(--green-rgb), 0.5);
       border-radius: 6px;
       transition: width 1.2s cubic-bezier(.16, 1, .3, 1);
     }
@@ -1099,7 +1100,7 @@
     .social a:hover {
       color: var(--green);
       border-color: var(--green);
-      box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+      box-shadow: 0 0 20px rgba(var(--green-rgb), 0.2);
     }
 
     .copy {
@@ -1166,7 +1167,7 @@
       border: 1px solid #16271c;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 255, 65, 0.04) inset;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(var(--green-rgb), 0.04) inset;
     }
 
     .term-bar {
@@ -2249,10 +2250,18 @@
         return null;
       }
 
-      // swap the site-wide accent color (drives most green via CSS var)
+      // swap the site-wide accent color — drives BOTH the solid color (--green)
+      // and every glow/shadow (rgba(var(--green-rgb), …)) so the whole palette shifts
       function setAccent(color) {
-        document.documentElement.style.setProperty('--green', color);
+        const root = document.documentElement;
+        root.style.setProperty('--green', color);
+        const rgb = hexToRgb(color);
+        if (rgb) root.style.setProperty('--green-rgb', rgb);
         document.querySelector('meta[name="theme-color"]').setAttribute('content', color);
+      }
+      function hexToRgb(hex) {
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+        return m ? parseInt(m[1], 16) + ', ' + parseInt(m[2], 16) + ', ' + parseInt(m[3], 16) : null;
       }
 
       function runCommand(raw) {
