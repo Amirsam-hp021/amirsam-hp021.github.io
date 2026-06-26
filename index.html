@@ -2078,14 +2078,14 @@
          (ipwho.is, with ipapi.co as fallback). VPN/proxy detection here is a
          best-effort heuristic, not a paid security feed: we flag datacenter /
          hosting ISPs and a browser-vs-IP timezone mismatch (classic VPN tells). */
-      let traceRun = false;
+      let traceCache = null;     // resolved IP data, kept so repeat traces don't re-hit the API
+      let traceBusy = false;     // guard against overlapping runs (double-enter)
+      let traceNotified = false; // owner webhook fires at most once per session
       const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
       async function traceVisitor() {
-        if (traceRun) {            // cache: don't re-hit the API on repeat calls
-          out('already traced — scroll up for the readout.', 'echo');
-          return;
-        }
+        if (traceBusy) return;     // a scan is already streaming
+        traceBusy = true;
         // local fingerprint (no network needed)
         const browserTz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'unknown';
         const lang = (navigator.languages && navigator.languages[0]) || navigator.language || '?';
@@ -2102,11 +2102,13 @@
         out('&nbsp;&nbsp;<span class="echo">resolving public IP ...</span>');
         await sleep(450);
 
-        const data = await fetchVisitorIp();
-        traceRun = true;
+        // reuse the cached lookup on repeat runs; only hit the API the first time
+        const data = traceCache || await fetchVisitorIp();
+        if (data) traceCache = data;
 
         if (!data) {
           out('&nbsp;&nbsp;<span class="err">could not resolve IP</span> (offline or blocked by an ad/privacy blocker)', 'err');
+          traceBusy = false;
           return;
         }
 
@@ -2153,8 +2155,9 @@
 
         // personalize the hero greeting from the geo we just resolved
         personalizeGreeting(city, country, ipTz || browserTz);
-        // optional: ping the owner that someone visited (off unless a URL is set)
-        notifyOwner({ ip: ip, city: city, country: country, isp: isp, verdict: verdict });
+        // optional: ping the owner that someone visited (off unless a URL is set; once per session)
+        if (!traceNotified) { traceNotified = true; notifyOwner({ ip: ip, city: city, country: country, isp: isp, verdict: verdict }); }
+        traceBusy = false;
       }
 
       /* Greet the visitor by city + local time of day — the "I see you" payoff.
