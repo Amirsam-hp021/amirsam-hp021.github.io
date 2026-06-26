@@ -2079,6 +2079,8 @@
          best-effort heuristic, not a paid security feed: we flag datacenter /
          hosting ISPs and a browser-vs-IP timezone mismatch (classic VPN tells). */
       let traceRun = false;
+      const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
       async function traceVisitor() {
         if (traceRun) {            // cache: don't re-hit the API on repeat calls
           out('already traced — scroll up for the readout.', 'echo');
@@ -2090,10 +2092,15 @@
         const screenStr = window.screen.width + '×' + window.screen.height + ' @' + (window.devicePixelRatio || 1) + 'x';
         const platform = navigator.platform || '?';
 
+        // pace the readout so it streams in like a real scan
         out('<span class="accent">[ trace ]</span> scanning incoming connection ...', 'ok');
+        await sleep(550);
         out('&nbsp;&nbsp;<span class="key">timezone</span> <span class="val">' + browserTz + '</span>  <span class="key">lang</span> <span class="val">' + lang + '</span>');
+        await sleep(320);
         out('&nbsp;&nbsp;<span class="key">screen</span> <span class="val">' + screenStr + '</span>  <span class="key">platform</span> <span class="val">' + escapeHtml(platform) + '</span>');
+        await sleep(320);
         out('&nbsp;&nbsp;<span class="echo">resolving public IP ...</span>');
+        await sleep(450);
 
         const data = await fetchVisitorIp();
         traceRun = true;
@@ -2112,8 +2119,11 @@
         const ipTz = data.timezone || '';
 
         out('&nbsp;&nbsp;<span class="key">ip</span>       <span class="val">' + escapeHtml(ip) + '</span>');
+        await sleep(400);
         out('&nbsp;&nbsp;<span class="key">location</span> <span class="val">' + escapeHtml([city, country].filter(Boolean).join(', ') || 'unknown') + '</span> ' + flag);
+        await sleep(360);
         out('&nbsp;&nbsp;<span class="key">isp</span>      <span class="val">' + escapeHtml(isp) + '</span>' + (asn ? ' <span class="echo">(' + escapeHtml(asn) + ')</span>' : ''));
+        await sleep(500);
 
         // ---- heuristics ----
         const hay = (isp + ' ' + (data.org || '') + ' ' + asn).toLowerCase();
@@ -2136,6 +2146,8 @@
         if (score >= 2) { verdict = 'VPN / PROXY likely 🕵️'; cls = 'err'; }
         else if (score === 1) { verdict = 'datacenter / possible VPN'; cls = 'warn'; }
         else { verdict = 'residential — looks clean ✓'; cls = 'ok'; }
+        out('&nbsp;&nbsp;<span class="echo">analyzing connection ...</span>');
+        await sleep(650);
         out('&nbsp;&nbsp;<span class="key">verdict</span>  <span class="' + cls + '">' + verdict + '</span>');
         out('&nbsp;&nbsp;<span class="echo">// heuristic guess — relax, nothing is stored.</span>');
 
