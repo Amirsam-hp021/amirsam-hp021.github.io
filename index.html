@@ -922,6 +922,141 @@
       color: #ff5f56;
     }
 
+    /* tools */
+    .tools-note {
+      margin-top: 14px;
+      color: #8a948c;
+      font-weight: 300;
+      font-size: 17px;
+    }
+
+    .tools-note b {
+      color: #eafff0;
+      font-weight: 500;
+    }
+
+    .tool-card {
+      margin-top: 36px;
+      background: #0a0c0b;
+      border: 1px solid #16201a;
+      border-radius: 8px;
+      padding: 30px 30px 34px;
+    }
+
+    .tool-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+
+    .tool-ico {
+      font-size: 28px;
+      color: var(--green);
+      line-height: 1;
+      text-shadow: 0 0 14px rgba(var(--green-rgb), 0.5);
+    }
+
+    .tool-head h3 {
+      font-size: 23px;
+      font-weight: 600;
+    }
+
+    .tool-head p {
+      color: #8a948c;
+      font-weight: 300;
+      font-size: 15px;
+      margin-top: 3px;
+    }
+
+    .tool-body {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 30px;
+      align-items: start;
+    }
+
+    .qr-controls {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .qr-controls .field {
+      margin-bottom: 0;
+    }
+
+    #qr-tool select,
+    #qr-tool textarea {
+      width: 100%;
+      background: #060908;
+      border: 1px solid #1f2d24;
+      border-radius: 5px;
+      padding: 12px 14px;
+      color: #eafff0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 16px;
+      resize: vertical;
+    }
+
+    #qr-tool select {
+      cursor: pointer;
+      width: auto;
+    }
+
+    #qr-tool textarea:focus,
+    #qr-tool select:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(var(--green-rgb), 0.1);
+    }
+
+    .qr-controls .btn {
+      border: none;
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      padding: 12px 22px;
+    }
+
+    .qr-controls a.btn.ghost {
+      border: 1px solid #2c4b38;
+    }
+
+    .qr-status {
+      font-size: 13px;
+      color: #6f7d74;
+    }
+
+    .qr-status.err {
+      color: #ff5f56;
+    }
+
+    .qr-preview {
+      background:
+        repeating-conic-gradient(#0e1411 0% 25%, #0a0c0b 0% 50%) 50% / 22px 22px;
+      border: 1px solid #16201a;
+      border-radius: 8px;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .qr-preview canvas {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      display: none;
+      box-shadow: 0 0 30px rgba(var(--green-rgb), 0.12);
+    }
+
+    .qr-preview.has-qr canvas {
+      display: block;
+    }
+
     /* projects */
     .proj-grid {
       margin-top: 50px;
@@ -1300,6 +1435,14 @@
         grid-template-columns: 1fr;
       }
 
+      .tool-body {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-preview {
+        max-width: 320px;
+      }
+
       #monitor {
         width: 88vw;
       }
@@ -1596,6 +1739,48 @@
           <div class="skill" data-level="78">
             <div class="skill-head"><span>Jest / Playwright</span><span class="pct">78%</span></div>
             <div class="bar"><span></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="tools" aria-labelledby="tools-title">
+      <div class="container">
+        <div class="sec-label">// things I built — use them</div>
+        <h2 class="sec-title" id="tools-title"><span class="num">05</span>Tools</h2>
+        <p class="tools-note">Small utilities that run <b>100% in your browser</b> — nothing is uploaded.</p>
+
+        <div class="tool-card" id="qr-tool">
+          <div class="tool-head">
+            <span class="tool-ico mono">▣</span>
+            <div>
+              <h3>QR Code Generator</h3>
+              <p>Turn any link or text into a downloadable QR code.</p>
+            </div>
+          </div>
+          <div class="tool-body">
+            <div class="tool-inputs">
+              <label class="field">
+                <span class="flabel mono">text or url</span>
+                <textarea id="qr-input" rows="3" placeholder="https://amirsam-hp021.github.io">https://amirsam-hp021.github.io</textarea>
+              </label>
+              <div class="qr-controls">
+                <label class="field">
+                  <span class="flabel mono">size</span>
+                  <select id="qr-size">
+                    <option value="256">256 px</option>
+                    <option value="512" selected>512 px</option>
+                    <option value="1024">1024 px</option>
+                  </select>
+                </label>
+                <button type="button" class="btn primary" id="qr-gen">Generate</button>
+                <a class="btn ghost" id="qr-dl" download="qrcode.png" hidden>Download PNG</a>
+              </div>
+              <span class="qr-status mono" id="qr-status" role="status" aria-live="polite"></span>
+            </div>
+            <div class="qr-preview" id="qr-preview" aria-live="polite">
+              <canvas id="qr-canvas" width="512" height="512" aria-label="generated QR code"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -1944,6 +2129,7 @@
             ['whoami', 'who is Amirsam'],
             ['projects', 'jump to projects'],
             ['skills', 'jump to skills'],
+            ['tools', 'jump to the tools (QR generator)'],
             ['stack', 'print the tech stack'],
             ['neofetch', 'system info, dev-style'],
             ['trace', 'scan YOUR connection (ip + vpn check)'],
@@ -1971,6 +2157,10 @@
         skills() {
           out('routing → <span class="cmd">#skills</span> ...', 'ok');
           gotoSection('skills');
+        },
+        tools() {
+          out('routing → <span class="cmd">#tools</span> ...', 'ok');
+          gotoSection('tools');
         },
         stack() {
           const s = [
@@ -2538,6 +2728,93 @@
             btn.textContent = original;
           }
         });
+      })();
+
+      /* ---------- TOOL: QR code generator (encoder lazy-loaded from same origin) ---------- */
+      (function qrTool() {
+        const gen = document.getElementById('qr-gen');
+        if (!gen) return;
+        const input = document.getElementById('qr-input');
+        const sizeSel = document.getElementById('qr-size');
+        const canvas = document.getElementById('qr-canvas');
+        const preview = document.getElementById('qr-preview');
+        const dl = document.getElementById('qr-dl');
+        const statusEl = document.getElementById('qr-status');
+        let libLoading = null;
+
+        function loadLib() {
+          if (window.qrcode) return Promise.resolve();
+          if (libLoading) return libLoading;
+          libLoading = new Promise(function (resolve, reject) {
+            const s = document.createElement('script');
+            s.src = 'qr-lib.min.js';
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('qr lib failed to load')); };
+            document.head.appendChild(s);
+          });
+          return libLoading;
+        }
+
+        function draw() {
+          const text = input.value.trim();
+          if (!text) {
+            statusEl.className = 'qr-status err';
+            statusEl.textContent = 'enter some text or a URL first';
+            return;
+          }
+          statusEl.className = 'qr-status';
+          statusEl.textContent = 'generating ...';
+          loadLib().then(function () {
+            let qr;
+            try {
+              qr = window.qrcode(0, 'M');   // type 0 = auto-fit to the data
+              qr.addData(text);
+              qr.make();
+            } catch (e) {
+              statusEl.className = 'qr-status err';
+              statusEl.textContent = 'text is too long for a single QR code';
+              return;
+            }
+            const count = qr.getModuleCount();
+            const px = parseInt(sizeSel.value, 10);
+            const margin = 4;               // quiet zone (modules)
+            const cell = Math.max(1, Math.floor(px / (count + margin * 2)));
+            const dim = cell * (count + margin * 2);
+            canvas.width = dim;
+            canvas.height = dim;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, dim, dim);
+            ctx.fillStyle = '#0a0c0b';
+            for (let r = 0; r < count; r++) {
+              for (let c = 0; c < count; c++) {
+                if (qr.isDark(r, c)) ctx.fillRect((c + margin) * cell, (r + margin) * cell, cell, cell);
+              }
+            }
+            preview.classList.add('has-qr');
+            dl.href = canvas.toDataURL('image/png');
+            dl.hidden = false;
+            statusEl.className = 'qr-status';
+            statusEl.textContent = 'done — ' + dim + '×' + dim + ' px · scan or download';
+            if (typeof sfx !== 'undefined') sfx.click();
+          }).catch(function () {
+            statusEl.className = 'qr-status err';
+            statusEl.textContent = 'could not load the QR engine';
+          });
+        }
+
+        gen.addEventListener('click', draw);
+        input.addEventListener('keydown', function (e) {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); draw(); }
+        });
+
+        // auto-generate the default QR the first time the tool scrolls into view
+        if ('IntersectionObserver' in window) {
+          const io = new IntersectionObserver(function (entries) {
+            if (entries[0].isIntersecting) { io.disconnect(); draw(); }
+          }, { threshold: 0.35 });
+          io.observe(document.getElementById('qr-tool'));
+        }
       })();
 
       /* ---------- LIVE VISITOR COUNTER (free, no key; hides if unavailable) ---------- */
