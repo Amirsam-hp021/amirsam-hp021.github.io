@@ -657,39 +657,12 @@
     /* about */
     .about-grid {
       margin-top: 46px;
-      display: grid;
-      grid-template-columns: 240px 1fr;
-      gap: 48px;
-      align-items: start;
-    }
-
-    .about-photo {
-      position: sticky;
-      top: 40px;
-    }
-
-    .avatar {
-      width: 100%;
-      aspect-ratio: 1;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 96px;
-      font-weight: bold;
-      color: var(--green);
-      background:
-        radial-gradient(120% 120% at 30% 20%, rgba(var(--green-rgb), 0.14), transparent 60%),
-        #0a0c0b;
-      border: 1px solid #1f3a29;
-      box-shadow: inset 0 0 50px rgba(var(--green-rgb), 0.06), 0 20px 50px rgba(0, 0, 0, 0.5);
-      text-shadow: 0 0 30px rgba(var(--green-rgb), 0.4);
+      max-width: 760px;
     }
 
     .about-loc {
-      margin-top: 16px;
-      font-size: 12.5px;
+      margin-bottom: 22px;
+      font-size: 13px;
       color: #8a948c;
       letter-spacing: .5px;
     }
@@ -1312,20 +1285,6 @@
         grid-template-columns: 1fr;
       }
 
-      .about-grid {
-        grid-template-columns: 1fr;
-        gap: 28px;
-      }
-
-      .about-photo {
-        position: static;
-        max-width: 180px;
-      }
-
-      .avatar {
-        font-size: 72px;
-      }
-
       .about-facts {
         grid-template-columns: 1fr;
       }
@@ -1480,12 +1439,8 @@
         <div class="sec-label">// whoami</div>
         <h2 class="sec-title" id="about-title"><span class="num">01</span>About</h2>
         <div class="about-grid">
-          <div class="about-photo">
-            <!-- swap this block for an <img src="me.jpg" alt="Amirsam"> when you add a photo -->
-            <div class="avatar" aria-hidden="true">A</div>
-            <div class="about-loc mono"><span class="loc-dot">◉</span> Yerevan, Armenia · Remote-friendly</div>
-          </div>
           <div class="about-body">
+            <div class="about-loc mono"><span class="loc-dot">◉</span> Yerevan, Armenia · Remote-friendly</div>
             <p>
               I'm <b>Amirsam</b>, a full-stack developer who likes the hard, unglamorous parts of
               software — the data models, the edge cases, the things that have to keep working at 3 AM.
