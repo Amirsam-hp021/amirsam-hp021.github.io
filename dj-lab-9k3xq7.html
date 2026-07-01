@@ -728,24 +728,24 @@
 
       /* ---------- ADDING TRACKS ---------- */
       async function addFiles(files) {
-        const wasIdle = curIndex === -1;
-        const firstNew = queue.length;
-        let added = 0, skipped = 0;
-        for (const f of files) {
-          // accept audio/*, known audio extensions, OR unknown-type files (let decode try)
-          const looksAudio = f.type.startsWith('audio/') ||
-            /\.(mp3|wav|m4a|ogg|oga|flac|aac|opus|weba|aiff?)$/i.test(f.name) || f.type === '';
-          if (!looksAudio) { skipped++; continue; }
-          const t = { id: uid++, name: f.name.replace(/\.[^.]+$/, ''), type: 'file', file: f, buffer: null, bpm: null, dur: 0 };
-          queue.push(t);
-          renderQueue();
-          decodeTrack(t);
-          added++;
+        try {
+          if (ctx.state === 'suspended') ctx.resume();
+          const wasIdle = curIndex === -1;
+          const firstNew = queue.length;
+          let added = 0;
+          for (const f of files) {
+            // add everything; if a file isn't decodable audio, decodeTrack flags it
+            const t = { id: uid++, name: f.name.replace(/\.[^.]+$/, ''), type: 'file', file: f, buffer: null, bpm: null, dur: 0 };
+            queue.push(t);
+            renderQueue();
+            decodeTrack(t);
+            added++;
+          }
+          if (added) dzStatus('✓ added ' + added + ' — list has ' + queue.length + ' track' + (queue.length > 1 ? 's' : ''), false);
+          if (wasIdle && added) playIndex(firstNew);
+        } catch (err) {
+          dzStatus('add error: ' + (err && err.message || err), true);
         }
-        if (added) dzStatus('✓ added ' + added + ' track' + (added > 1 ? 's' : '') + ' — mixing…', false);
-        else dzStatus('✗ no audio files recognized' + (skipped ? ' (' + skipped + ' skipped)' : ''), true);
-        // if nothing was playing, start the first newly-added track (plays once decoded)
-        if (wasIdle && added) playIndex(firstNew);
       }
 
       const dzStatusEl = document.getElementById('dz-status');
@@ -1092,6 +1092,11 @@
         addFiles([...e.target.files]);
         fileInput.value = '';
       });
+
+      // Chrome keeps the audio engine suspended until the user interacts —
+      // resume it on ANY click/key/touch so playback is never silent.
+      ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
+        document.addEventListener(ev, () => { if (ctx.state === 'suspended') ctx.resume(); }, { passive: true }));
 
       // Make the WHOLE window a drop target so dropping anywhere works and the
       // browser never navigates to the file. Highlight the zone while dragging.
