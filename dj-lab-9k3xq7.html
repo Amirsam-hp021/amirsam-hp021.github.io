@@ -800,21 +800,44 @@
           const buf = await ctx.decodeAudioData(arr.slice(0));
           t.buffer = buf;
           t.dur = buf.duration;
-          const est = estimateBeat(buf);
-          t.bpm = est ? est.bpm : null;
-          t.beatOffset = est ? est.offset : 0;
-          const loud = analyzeLoudness(buf);    // normalize loudness + capture energy
-          t.gainTrim = loud.trim;
-          t.energy = loud.energy;
-          t.autoEq = autoEqFor(buf);            // AI tonal-correction EQ (dB per band)
           renderQueue();
-          // if the user pressed play on this track before it finished decoding, start it now
+          // play immediately if requested — don't wait for the heavy analysis
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
+          scheduleAnalysis(t, buf);           // BPM / loudness / auto-EQ off the critical path
         } catch (e) {
           t.name += '  (decode failed)';
           renderQueue();
           dzStatus('✗ "' + t.name + '" could not be decoded — try MP3/WAV', true);
         }
+      }
+
+      // run the expensive analysis after playback starts, staggered so it never janks the UI
+      let analysisQueue = [], analysisBusy = false;
+      function scheduleAnalysis(t, buf) {
+        analysisQueue.push(() => {
+          const est = estimateBeat(buf);
+          t.bpm = est ? est.bpm : null;
+          t.beatOffset = est ? est.offset : 0;
+          const loud = analyzeLoudness(buf);
+          t.gainTrim = loud.trim; t.energy = loud.energy;
+          t.autoEq = autoEqFor(buf);
+          // if this track is already on a deck, apply the freshly-computed trim + auto-EQ live
+          [active, idle].forEach(ch => {
+            if (ch.item === t) {
+              ch.trim.gain.setTargetAtTime(t.gainTrim || 1, ctx.currentTime, 0.1);
+              applyAutoEq(ch, t);
+            }
+          });
+          renderQueue();
+        });
+        if (!analysisBusy) runAnalysis();
+      }
+      function runAnalysis() {
+        analysisBusy = true;
+        const job = analysisQueue.shift();
+        if (!job) { analysisBusy = false; return; }
+        // yield to the browser between tracks so audio/UI stay smooth
+        (window.requestIdleCallback || window.setTimeout)(() => { try { job(); } catch (e) {} runAnalysis(); }, { timeout: 400 });
       }
 
       let pendingPlayId = null;
@@ -1276,24 +1299,27 @@
         if (ctx.state === 'suspended') ctx.resume();
         setBtn.disabled = true;
         setBtn.textContent = '⏳ loading…';
-        const files = [];
-        let failed = 0;
-        for (let i = 0; i < MY_SET.length; i++) {
+        let done = 0, failed = 0;
+        // fire ALL downloads at once (parallel), then add each in order as it arrives,
+        // so the first track starts playing while the rest are still downloading.
+        const jobs = MY_SET.map(url => {
+          const name = url.split('/').pop();
+          return fetch(url, { cache: 'force-cache' })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then(b => new File([b], name, { type: b.type || 'audio/mpeg' }));
+        });
+        for (let i = 0; i < jobs.length; i++) {
           const name = MY_SET[i].split('/').pop();
-          dzStatus('downloading ' + (i + 1) + '/' + MY_SET.length + ' — ' + name + ' …', false, true); // persist
           try {
-            const r = await fetch(MY_SET[i], { cache: 'force-cache' });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const blob = await r.blob();
-            files.push(new File([blob], name, { type: blob.type || 'audio/mpeg' }));
-          } catch (e) {
-            failed++;
-            dzStatus('✗ ' + name + ' failed: ' + (e.message || e), true, true);
-          }
+            const f = await jobs[i];       // resolves in order; all fetch concurrently
+            addFiles([f]);                 // first one auto-plays immediately
+            done++;
+            dzStatus('▶ ' + done + '/' + MY_SET.length + ' loaded — ' + name + (done < MY_SET.length ? ' · fetching rest…' : ''), false, done < MY_SET.length);
+          } catch (e) { failed++; dzStatus('✗ ' + name + ' failed: ' + (e.message || e), true, true); }
         }
         setBtn.disabled = false;
         setBtn.textContent = '♫ Load my set (4)';
-        if (files.length) { dzStatus('✓ loaded ' + files.length + ' track(s) — starting set', false); addFiles(files); }
+        if (done) dzStatus('✓ set loaded — ' + done + ' track(s)', false);
         else dzStatus('✗ could not load any tracks — check your connection', true);
       });
 
