@@ -399,6 +399,16 @@
 
     .browse-btn:hover { box-shadow: 0 0 20px rgba(var(--green-rgb), 0.5); }
 
+    .set-btn {
+      margin-left: 10px;
+      background: transparent;
+      color: var(--green);
+      border: 1px solid #1f3a29;
+    }
+
+    .set-btn:hover { border-color: var(--green); box-shadow: 0 0 16px rgba(var(--green-rgb), 0.25); }
+    .set-btn:disabled { opacity: .5; cursor: default; }
+
     .dz-status { margin-top: 12px; font-size: 12px; min-height: 15px; color: var(--green); }
     .dz-status.err { color: #ff5f56; }
     .dropzone .dz-ico { font-size: 30px; }
@@ -547,6 +557,7 @@
         <h3>Drop audio files to mix</h3>
         <p>MP3 / WAV / M4A / OGG — real beat-aware crossfade, EQ & visualizer. Nothing is uploaded.</p>
         <label class="browse-btn" for="file-input" id="browse-btn">⬆ Browse files</label>
+        <button type="button" class="browse-btn set-btn" id="set-btn" onclick="event.stopPropagation()">♫ Load my set (4)</button>
         <div class="dz-status mono" id="dz-status"></div>
         <div class="or">— or paste a YouTube link (crossfade only) —</div>
         <div class="yt-add" onclick="event.stopPropagation()">
@@ -1165,6 +1176,26 @@
       // resume it on ANY click/key/touch so playback is never silent.
       ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
         document.addEventListener(ev, () => { if (ctx.state === 'suspended') ctx.resume(); }, { passive: true }));
+
+      // "Load my set" — fetch the bundled tracks and drop them into the queue
+      const setBtn = document.getElementById('set-btn');
+      const MY_SET = ['dj-tracks/BadDay.mp3', 'dj-tracks/FreeBird.mp3', 'dj-tracks/Shahmen-Mark-Remix.mp3', 'dj-tracks/PreKai.mp3'];
+      setBtn.addEventListener('click', async () => {
+        if (ctx.state === 'suspended') ctx.resume();
+        setBtn.disabled = true;
+        dzStatus('loading set…', false);
+        const files = [];
+        for (const url of MY_SET) {
+          try {
+            const r = await fetch(url, { cache: 'force-cache' });
+            if (!r.ok) throw new Error(r.status);
+            const blob = await r.blob();
+            files.push(new File([blob], url.split('/').pop(), { type: blob.type || 'audio/mpeg' }));
+          } catch (e) { dzStatus('✗ could not load ' + url.split('/').pop(), true); }
+        }
+        if (files.length) addFiles(files);
+        setBtn.disabled = false;
+      });
 
       // Make the WHOLE window a drop target so dropping anywhere works and the
       // browser never navigates to the file. Highlight the zone while dragging.
