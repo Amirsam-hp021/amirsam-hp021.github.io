@@ -767,7 +767,9 @@
           const buf = await ctx.decodeAudioData(arr.slice(0));
           t.buffer = buf;
           t.dur = buf.duration;
-          t.bpm = estimateBPM(buf);
+          const est = estimateBeat(buf);
+          t.bpm = est ? est.bpm : null;
+          t.beatOffset = est ? est.offset : 0;
           renderQueue();
           // if the user pressed play on this track before it finished decoding, start it now
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
@@ -831,12 +833,14 @@
         renderQueue();
       }
 
-      function startOnChannel(ch, t, fadeInNow, rate) {
+      function startOnChannel(ch, t, fadeInNow, rate, when, bufOffset) {
         rate = rate || 1;
         ch.item = t;
         ch.rate = rate;
         ch.filter.frequency.cancelScheduledValues(ctx.currentTime);
         ch.filter.frequency.value = 22000;
+        const startTime = when && when > ctx.currentTime ? when : ctx.currentTime;
+        const off = bufOffset || 0;
         if (t.type === 'file') {
           if (!t.buffer) { pendingPlayId = t.id; return; }
           const src = ctx.createBufferSource();
@@ -844,20 +848,19 @@
           src.playbackRate.value = rate;   // beatmatch: >1 faster, <1 slower (pitch shifts too, like vinyl)
           src.connect(ch.eqLow);           // → eqMid → eqHigh → filter → gain → master
           ch.src = src; ch.yt = null; ch.kind = 'file';
-          ch.dur = t.buffer.duration / rate;   // effective real-time duration at this speed
-          ch.offset = 0; ch.startAt = ctx.currentTime;
-          src.start(0);
+          ch.offset = off; ch.startAt = startTime;
+          ch.dur = (t.buffer.duration - off) / rate;   // effective real-time duration at this speed
+          src.start(startTime, off);       // sample-accurate scheduled start at a beat
           src.onended = () => { if (ch.item === t && ch.kind === 'file') onTrackEndedNatural(ch); };
         } else {
           ch.kind = 'yt'; ch.src = null; ch.rate = 1;
           startYtOnChannel(ch, t, fadeInNow);
         }
-        // fade in (file channels use the gain node; yt is handled via volume ramps)
+        // fade in — timed to the scheduled start so it aligns with the beat
         if (ch.kind === 'file') {
-          const now = ctx.currentTime;
-          ch.gain.gain.cancelScheduledValues(now);
-          if (fadeInNow) { ch.gain.gain.setValueAtTime(1, now); }
-          else { ch.gain.gain.setValueAtTime(0.0001, now); ch.gain.gain.linearRampToValueAtTime(1, now + xfadeDur); }
+          ch.gain.gain.cancelScheduledValues(ctx.currentTime);
+          if (fadeInNow) { ch.gain.gain.setValueAtTime(1, startTime); }
+          else { ch.gain.gain.setValueAtTime(0.0001, startTime); ch.gain.gain.linearRampToValueAtTime(1, startTime + xfadeDur); }
         }
         const effBpm = (t.bpm && ch.rate) ? Math.round(t.bpm * ch.rate) : t.bpm;
         npTitle.textContent = t.name;
@@ -891,32 +894,58 @@
         return (r >= 0.85 && r <= 1.18) ? r : 1;               // only nudge within a musical range
       }
 
+      // real-time of the outgoing track's next beat at or after time `after`
+      function nextOutgoingBeat(from, after) {
+        if (from.kind !== 'file' || !from.item || !from.item.bpm) return null;
+        const bpm = from.item.bpm, r = from.rate || 1, boff = from.item.beatOffset || 0;
+        const PbT = 60 / bpm;                                    // beat period in track-time
+        const afterT = (after - from.startAt) * r + (from.offset || 0);  // track pos at `after`
+        const k = Math.ceil((afterT - boff) / PbT - 1e-6);
+        const beatT = boff + k * PbT;
+        return from.startAt + (beatT - (from.offset || 0)) / r;  // back to real time
+      }
+
       function beginCrossfade() {
         const next = queue[curIndex + 1];
         if (!next) return;
         crossfading = true;
         const from = active, to = idle;
         const rate = beatmatchRate(from, next);
-        startOnChannel(to, next, false, rate);  // fades in over xfadeDur, tempo-synced
-        // fade out + optional FX sweep on the outgoing track
-        const now = ctx.currentTime;
+
+        // beat-align: schedule the incoming track to start on the outgoing's next beat,
+        // itself starting at ITS first beat — so the kicks land together.
+        let when = ctx.currentTime + 0.06;
+        let off = 0;
+        let aligned = false;
+        if (bmSync && from.kind === 'file' && next.type === 'file' && from.item && from.item.bpm && next.bpm) {
+          const A = nextOutgoingBeat(from, when);
+          if (A && A - ctx.currentTime < 2.5) { when = A; off = next.beatOffset || 0; aligned = true; }
+        }
+
+        startOnChannel(to, next, false, rate, when, off);  // scheduled, tempo-synced, beat-aligned
+
+        // fade out + optional FX sweep on the outgoing track, timed to `when`
         if (from.kind === 'file') {
-          from.gain.gain.cancelScheduledValues(now);
-          from.gain.gain.setValueAtTime(from.gain.gain.value, now);
-          from.gain.gain.linearRampToValueAtTime(0.0001, now + xfadeDur);
+          from.gain.gain.cancelScheduledValues(ctx.currentTime);
+          from.gain.gain.setValueAtTime(from.gain.gain.value, when);
+          from.gain.gain.linearRampToValueAtTime(0.0001, when + xfadeDur);
           if (fxSweep) {
-            from.filter.frequency.cancelScheduledValues(now);
-            from.filter.frequency.setValueAtTime(22000, now);
-            from.filter.frequency.exponentialRampToValueAtTime(300, now + xfadeDur);
+            from.filter.frequency.cancelScheduledValues(ctx.currentTime);
+            from.filter.frequency.setValueAtTime(22000, when);
+            from.filter.frequency.exponentialRampToValueAtTime(300, when + xfadeDur);
           }
         } else if (from.kind === 'yt' && from.yt) {
           ytVolRamp(from.yt, 100, 0, xfadeDur * 1000);
         }
+
+        if (bmSync) dzStatus(aligned ? '♫ beat-aligned mix' + (Math.abs(rate - 1) > 0.005 ? ' + tempo sync' : '') : 'mixing (beat grid unclear — plain crossfade)', false);
+
         // swap roles
         active = to; idle = from;
         curIndex++;
         renderQueue();
-        setTimeout(() => { stopChannel(idle); crossfading = false; }, xfadeDur * 1000 + 200);
+        const wait = (when - ctx.currentTime + xfadeDur) * 1000 + 250;
+        setTimeout(() => { stopChannel(idle); crossfading = false; }, wait);
       }
 
       function advance(auto) {
@@ -940,7 +969,14 @@
         }
         if (playing) { pauseAll(); } else { resumeAll(); }
       };
-      btnNext.onclick = () => { if (curIndex !== -1) advance(false); else if (queue.length) playIndex(0); };
+      btnNext.onclick = () => {
+        if (curIndex === -1) { if (queue.length) playIndex(0); return; }
+        if (crossfading) return;
+        if (curIndex + 1 < queue.length) {
+          if (autoMix) beginCrossfade();   // hear the mix on demand
+          else playIndex(curIndex + 1);
+        }
+      };
       btnPrev.onclick = () => { if (curIndex > 0) playIndex(curIndex - 1); else if (curIndex === 0) playIndex(0); };
 
       let pausedAt = 0;
@@ -962,7 +998,7 @@
         if (active.kind === 'file' && active.item && active.item.buffer) {
           dur = active.dur;
           // ctx.currentTime is frozen while suspended (paused), so this stays correct
-          cur = ctx.currentTime - active.startAt;
+          cur = Math.max(0, ctx.currentTime - active.startAt);   // startAt may be a scheduled (future) time
         } else if (active.kind === 'yt' && active.yt && active.yt.getDuration) {
           try { dur = active.yt.getDuration() || 0; cur = active.yt.getCurrentTime() || 0; } catch (e) {}
         }
@@ -1015,36 +1051,47 @@
       tick();
 
       /* ---------- BPM ESTIMATE (lightweight) ---------- */
-      function estimateBPM(buffer) {
+      // Returns { bpm, offset } — offset = seconds to the first beat (phase).
+      // BPM via autocorrelation of the onset flux; phase via comb-filter energy.
+      function estimateBeat(buffer) {
         try {
           const rate = buffer.sampleRate;
           const data = buffer.getChannelData(0);
-          // downsample envelope
-          const step = Math.floor(rate / 200);         // ~200 Hz envelope
+          const eRate = 200;                          // envelope sample rate (Hz)
+          const step = Math.max(1, Math.floor(rate / eRate));
           const env = [];
           for (let i = 0; i < data.length; i += step) {
             let peak = 0;
             for (let j = 0; j < step && i + j < data.length; j++) { const a = Math.abs(data[i + j]); if (a > peak) peak = a; }
             env.push(peak);
           }
-          const eRate = 200;
-          // find peaks above threshold
-          const thr = 0.55 * Math.max.apply(null, env);
-          const peaks = [];
-          for (let i = 1; i < env.length - 1; i++) {
-            if (env[i] > thr && env[i] >= env[i - 1] && env[i] > env[i + 1]) { peaks.push(i); i += 6; }
+          // onset flux = positive change in energy (sharpens the beats)
+          const flux = new Float32Array(env.length);
+          for (let i = 1; i < env.length; i++) { const d = env[i] - env[i - 1]; flux[i] = d > 0 ? d : 0; }
+          if (flux.length < eRate * 4) return null;   // need a few seconds
+
+          // --- BPM: autocorrelation over a plausible lag range ---
+          const minBpm = 85, maxBpm = 175;
+          const minLag = Math.floor(eRate * 60 / maxBpm);
+          const maxLag = Math.ceil(eRate * 60 / minBpm);
+          let bestLag = 0, bestVal = -1;
+          for (let lag = minLag; lag <= maxLag; lag++) {
+            let sum = 0;
+            for (let i = 0; i + lag < flux.length; i++) sum += flux[i] * flux[i + lag];
+            if (sum > bestVal) { bestVal = sum; bestLag = lag; }
           }
-          if (peaks.length < 4) return null;
-          const gaps = {};
-          for (let i = 1; i < peaks.length; i++) {
-            let bpm = 60 * eRate / (peaks[i] - peaks[i - 1]);
-            while (bpm < 90) bpm *= 2; while (bpm > 180) bpm /= 2;
-            bpm = Math.round(bpm);
-            gaps[bpm] = (gaps[bpm] || 0) + 1;
+          if (!bestLag) return null;
+          const bpm = Math.round(60 * eRate / bestLag);
+
+          // --- phase: which offset within one beat period has the most onset energy ---
+          const period = bestLag;
+          let bestPhase = 0, bestE = -1;
+          for (let p = 0; p < period; p++) {
+            let e = 0;
+            for (let i = p; i < flux.length; i += period) e += flux[i];
+            if (e > bestE) { bestE = e; bestPhase = p; }
           }
-          let best = null, bestC = 0;
-          for (const k in gaps) if (gaps[k] > bestC) { bestC = gaps[k]; best = +k; }
-          return best;
+          return { bpm: bpm, offset: bestPhase / eRate };
         } catch (e) { return null; }
       }
 
