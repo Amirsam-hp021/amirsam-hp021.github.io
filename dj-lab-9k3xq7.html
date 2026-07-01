@@ -309,6 +309,53 @@
       background: var(--green); cursor: pointer; box-shadow: 0 0 8px rgba(var(--green-rgb), 0.5);
     }
 
+    /* EQ bar */
+    .eqbar {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 12px 22px;
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+      background: rgba(var(--green-rgb), 0.015);
+    }
+
+    .eqbar .eq-title {
+      color: var(--green);
+      letter-spacing: 2px;
+      font-size: 12px;
+    }
+
+    .eq-band {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #6f7d74;
+    }
+
+    .eq-band .eq-name { min-width: 46px; letter-spacing: 1px; }
+    .eq-band .eq-val { color: var(--green); min-width: 26px; text-align: right; }
+
+    .eq-reset {
+      background: none;
+      border: 1px solid #26332a;
+      color: #6f7d74;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 5px 12px;
+      cursor: pointer;
+    }
+
+    .eq-reset:hover { color: var(--green); border-color: var(--green); }
+
+    .eq-hint {
+      margin-left: auto;
+      color: #3a4a40;
+      font-size: 11px;
+    }
+
     /* layout */
     .wrap { max-width: 1100px; margin: 0 auto; padding: 26px 22px 80px; }
 
@@ -441,6 +488,27 @@
       </div>
     </div>
 
+    <div class="eqbar">
+      <span class="eq-title mono">EQ</span>
+      <div class="eq-band">
+        <span class="eq-name">BASS</span>
+        <input type="range" id="eq-low" min="-15" max="15" step="1" value="0" />
+        <b class="eq-val mono" id="eq-low-v">0</b>
+      </div>
+      <div class="eq-band">
+        <span class="eq-name">MID</span>
+        <input type="range" id="eq-mid" min="-15" max="15" step="1" value="0" />
+        <b class="eq-val mono" id="eq-mid-v">0</b>
+      </div>
+      <div class="eq-band">
+        <span class="eq-name">TREBLE</span>
+        <input type="range" id="eq-high" min="-15" max="15" step="1" value="0" />
+        <b class="eq-val mono" id="eq-high-v">0</b>
+      </div>
+      <button class="eq-reset mono" id="eq-reset" type="button">flat</button>
+      <span class="eq-hint mono">applies to uploaded files</span>
+    </div>
+
     <div class="wrap">
       <div class="dropzone" id="dropzone">
         <div class="dz-ico">🎵</div>
@@ -539,12 +607,19 @@
       function makeChannel() {
         const gain = ctx.createGain();
         gain.gain.value = 0;
+        // FX-sweep filter (used by the transition low-pass sweep)
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 22000;
+        // 3-band EQ: bass (low shelf) → mid (peaking) → treble (high shelf)
+        const eqLow = ctx.createBiquadFilter(); eqLow.type = 'lowshelf'; eqLow.frequency.value = 120;
+        const eqMid = ctx.createBiquadFilter(); eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
+        const eqHigh = ctx.createBiquadFilter(); eqHigh.type = 'highshelf'; eqHigh.frequency.value = 3200;
+        // chain: source → eqLow → eqMid → eqHigh → filter → gain → master
+        eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(filter);
         filter.connect(gain);
         gain.connect(master);
-        return { gain, filter, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, raf: 0 };
+        return { gain, filter, eqLow, eqMid, eqHigh, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, raf: 0 };
       }
       const chA = makeChannel();
       const chB = makeChannel();
@@ -689,7 +764,7 @@
           if (!t.buffer) { pendingPlayId = t.id; return; }
           const src = ctx.createBufferSource();
           src.buffer = t.buffer;
-          src.connect(ch.filter);
+          src.connect(ch.eqLow);          // → eqMid → eqHigh → filter → gain → master
           ch.src = src; ch.yt = null; ch.kind = 'file';
           ch.dur = t.buffer.duration; ch.offset = 0; ch.startAt = ctx.currentTime;
           src.start(0);
@@ -957,6 +1032,25 @@
       tgAuto.onclick = () => { autoMix = !autoMix; tgAuto.classList.toggle('on', autoMix); };
       tgFx.onclick = () => { fxSweep = !fxSweep; tgFx.classList.toggle('on', fxSweep); };
       xfade.oninput = () => { xfadeDur = +xfade.value; xfadeVal.textContent = xfadeDur + 's'; };
+
+      // ---- 3-band EQ (applies live to both channels' file audio) ----
+      const eqLowS = el('eq-low'), eqMidS = el('eq-mid'), eqHighS = el('eq-high');
+      const eqLowV = el('eq-low-v'), eqMidV = el('eq-mid-v'), eqHighV = el('eq-high-v');
+      function setEQ(band, db) {
+        [chA, chB].forEach(ch => {
+          const node = band === 'low' ? ch.eqLow : band === 'mid' ? ch.eqMid : ch.eqHigh;
+          node.gain.setTargetAtTime(db, ctx.currentTime, 0.02);   // smooth, click-free
+        });
+      }
+      const fmtDb = v => (v > 0 ? '+' + v : '' + v);
+      eqLowS.oninput = () => { setEQ('low', +eqLowS.value); eqLowV.textContent = fmtDb(+eqLowS.value); };
+      eqMidS.oninput = () => { setEQ('mid', +eqMidS.value); eqMidV.textContent = fmtDb(+eqMidS.value); };
+      eqHighS.oninput = () => { setEQ('high', +eqHighS.value); eqHighV.textContent = fmtDb(+eqHighS.value); };
+      el('eq-reset').onclick = () => {
+        eqLowS.value = eqMidS.value = eqHighS.value = 0;
+        eqLowV.textContent = eqMidV.textContent = eqHighV.textContent = '0';
+        setEQ('low', 0); setEQ('mid', 0); setEQ('high', 0);
+      };
 
       // keyboard: space = play/pause, → skip
       document.addEventListener('keydown', e => {
