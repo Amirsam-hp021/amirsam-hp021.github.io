@@ -477,12 +477,12 @@
 
     /* ============================================================
        PASSWORD GATE  (soft client-side lock — not real security)
-       Default password: amirsam-dj  → change PASS_SHA256 below.
-       To make a new hash, run in the console:
+       The password is stored only as a SHA-256 hash below (plaintext not in source).
+       To change it, run in the console and paste the result into PASS_SHA256:
          crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpass'))
            .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
        ============================================================ */
-    const PASS_SHA256 = '27fd7d9dab6bea9bf3c46b72284e82a13a407d2b41ecfb4efe110e6e40ef715a';
+    const PASS_SHA256 = '880f2ea0a9f14e8f0ccfe99012f01a57f9f0a742935b828a6807f0e65d3635a7';
     const gate = document.getElementById('gate');
     const app = document.getElementById('app');
     const gateForm = document.getElementById('gate-form');
