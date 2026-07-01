@@ -503,7 +503,7 @@
 
     gateForm.addEventListener('submit', async function (e) {
       e.preventDefault();
-      const h = await sha256(gateInput.value);
+      const h = await sha256(gateInput.value.trim());
       if (h === PASS_SHA256) { unlock(); }
       else { gateErr.textContent = 'wrong password'; gateInput.value = ''; gateInput.focus(); }
     });
