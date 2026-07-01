@@ -442,6 +442,8 @@
       font-family: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer;
     }
     .sec-title button:hover { color: var(--green); border-color: var(--green); }
+    .q-actions { display: inline-flex; gap: 8px; }
+    #btn-autoorder { color: var(--green); border-color: #1f3a29; }
 
     /* queue */
     #queue { list-style: none; display: flex; flex-direction: column; gap: 8px; }
@@ -570,7 +572,10 @@
 
       <div class="sec-title">
         <span>QUEUE <span class="count" id="q-count">(0)</span></span>
-        <button id="btn-clear" type="button">clear all</button>
+        <span class="q-actions">
+          <button id="btn-autoorder" type="button">✨ AI order</button>
+          <button id="btn-clear" type="button">clear all</button>
+        </span>
       </div>
       <ul id="queue"></ul>
       <div class="empty" id="q-empty">// queue is empty — drop some tracks in</div>
@@ -785,7 +790,9 @@
           const est = estimateBeat(buf);
           t.bpm = est ? est.bpm : null;
           t.beatOffset = est ? est.offset : 0;
-          t.gainTrim = loudnessTrim(buf);       // normalize perceived loudness
+          const loud = analyzeLoudness(buf);    // normalize loudness + capture energy
+          t.gainTrim = loud.trim;
+          t.energy = loud.energy;
           renderQueue();
           // if the user pressed play on this track before it finished decoding, start it now
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
@@ -1123,16 +1130,16 @@
         } catch (e) { return null; }
       }
 
-      // perceived-loudness trim: quieter tracks come up, louder ones come down
-      function loudnessTrim(buffer) {
+      // perceived loudness → { trim, energy }.  trim normalizes volume; energy drives set ordering.
+      function analyzeLoudness(buffer) {
         try {
           const d = buffer.getChannelData(0);
           const step = Math.max(1, Math.floor(d.length / 60000));
           let sum = 0, n = 0;
           for (let i = 0; i < d.length; i += step) { sum += d[i] * d[i]; n++; }
           const rms = Math.sqrt(sum / (n || 1)) || 0.12;
-          return Math.max(0.45, Math.min(2.2, 0.14 / rms));   // ref RMS ≈ 0.14
-        } catch (e) { return 1; }
+          return { trim: Math.max(0.45, Math.min(2.2, 0.14 / rms)), energy: rms };
+        } catch (e) { return { trim: 1, energy: 0.12 }; }
       }
 
       // equal-power crossfade curve (no volume dip in the middle)
@@ -1270,6 +1277,58 @@
         setLive(false, 'idle'); npTitle.textContent = '— nothing loaded —'; npMeta.textContent = 'add tracks below to start the set';
         renderQueue();
       };
+
+      /* ---------- AI SET ORDERING ---------- */
+      // transition cost between two tracks: small BPM jump + small energy jump = smooth
+      function transitionCost(a, b) {
+        const bpmA = a.bpm || 120, bpmB = b.bpm || 120;
+        const eA = a.energy != null ? a.energy : 0.12, eB = b.energy != null ? b.energy : 0.12;
+        return Math.abs(bpmA - bpmB) / 8 + Math.abs(eA - eB) * 12;
+      }
+      // nearest-neighbour path + 2-opt; anchored to a fixed first track if one is playing
+      function orderPool(pool, anchor) {
+        const n = pool.length;
+        // choose the start: nearest to the anchor, else the lowest-energy track (so the set builds)
+        let start = 0, best = Infinity;
+        pool.forEach((t, i) => {
+          const c = anchor ? transitionCost(anchor, t) : (t.energy != null ? t.energy : 0.12);
+          if (c < best) { best = c; start = i; }
+        });
+        const used = new Array(n).fill(false);
+        const path = [start]; used[start] = true;
+        for (let k = 1; k < n; k++) {
+          const last = pool[path[path.length - 1]];
+          let nb = -1, bc = Infinity;
+          for (let j = 0; j < n; j++) if (!used[j]) { const c = transitionCost(last, pool[j]); if (c < bc) { bc = c; nb = j; } }
+          path.push(nb); used[nb] = true;
+        }
+        // 2-opt: reverse segments while it lowers total adjacent cost
+        const pathCost = p => {
+          let s = anchor ? transitionCost(anchor, pool[p[0]]) : 0;
+          for (let i = 1; i < p.length; i++) s += transitionCost(pool[p[i - 1]], pool[p[i]]);
+          return s;
+        };
+        let improved = true, guard = 0;
+        while (improved && guard++ < 60) {
+          improved = false;
+          for (let i = 0; i < n - 1; i++) for (let j = i + 1; j < n; j++) {
+            const cand = path.slice(0, i).concat(path.slice(i, j + 1).reverse(), path.slice(j + 1));
+            if (pathCost(cand) < pathCost(path) - 1e-9) { for (let x = 0; x < n; x++) path[x] = cand[x]; improved = true; }
+          }
+        }
+        return path.map(i => pool[i]);
+      }
+      function planSet() {
+        const front = curIndex >= 0 ? queue.slice(0, curIndex + 1) : [];
+        const pool = curIndex >= 0 ? queue.slice(curIndex + 1) : queue.slice();
+        if (pool.length < 2) { dzStatus('need 2+ upcoming tracks to arrange', true); return; }
+        const undecoded = pool.filter(t => t.type === 'file' && t.bpm == null).length;
+        const anchor = front.length ? front[front.length - 1] : null;
+        queue = front.concat(orderPool(pool, anchor));
+        renderQueue();
+        dzStatus('✨ set arranged by BPM + energy' + (undecoded ? ' (' + undecoded + ' still analyzing)' : ''), false);
+      }
+      document.getElementById('btn-autoorder').onclick = planSet;
 
       tgAuto.onclick = () => { autoMix = !autoMix; tgAuto.classList.toggle('on', autoMix); };
       tgFx.onclick = () => { fxSweep = !fxSweep; tgFx.classList.toggle('on', fxSweep); };
