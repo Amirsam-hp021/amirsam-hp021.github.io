@@ -372,6 +372,7 @@
     .dropzone.drag { border-color: var(--green); background: rgba(var(--green-rgb), 0.07); }
 
     .browse-btn {
+      display: inline-block;
       margin-top: 14px;
       background: var(--green);
       color: #001b08;
@@ -382,6 +383,18 @@
       font-weight: bold;
       cursor: pointer;
       letter-spacing: 1px;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     .browse-btn:hover { box-shadow: 0 0 20px rgba(var(--green-rgb), 0.5); }
@@ -532,14 +545,15 @@
         <div class="dz-ico">🎵</div>
         <h3>Drop audio files to mix</h3>
         <p>MP3 / WAV / M4A / OGG — real beat-aware crossfade, EQ & visualizer. Nothing is uploaded.</p>
-        <button type="button" class="browse-btn" id="browse-btn">⬆ Browse files</button>
+        <label class="browse-btn" for="file-input" id="browse-btn">⬆ Browse files</label>
         <div class="dz-status mono" id="dz-status"></div>
         <div class="or">— or paste a YouTube link (crossfade only) —</div>
         <div class="yt-add" onclick="event.stopPropagation()">
           <input id="yt-url" type="text" placeholder="https://youtube.com/watch?v=..." />
           <button id="yt-btn" type="button">ADD</button>
         </div>
-        <input id="file-input" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus" multiple hidden />
+        <input id="file-input" class="visually-hidden" type="file"
+          accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus" multiple />
       </div>
 
       <div class="sec-title">
@@ -1052,11 +1066,13 @@
       /* ---------- UI WIRING ---------- */
       const dz = document.getElementById('dropzone');
       const fileInput = document.getElementById('file-input');
-      const browseBtn = document.getElementById('browse-btn');
-      const openPicker = () => { if (ctx.state === 'suspended') ctx.resume(); fileInput.click(); };
-      browseBtn.addEventListener('click', e => { e.stopPropagation(); openPicker(); });
-      dz.addEventListener('click', openPicker);
-      fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
+      // the "Browse files" label opens the picker natively (no JS gesture needed).
+      // resume audio on the resulting change event so playback is allowed.
+      fileInput.addEventListener('change', e => {
+        if (ctx.state === 'suspended') ctx.resume();
+        addFiles([...e.target.files]);
+        fileInput.value = '';
+      });
 
       // Make the WHOLE window a drop target so dropping anywhere works and the
       // browser never navigates to the file. Highlight the zone while dragging.
