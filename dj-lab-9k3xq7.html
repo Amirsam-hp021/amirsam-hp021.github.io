@@ -576,12 +576,13 @@
       <div class="empty" id="q-empty">// queue is empty — drop some tracks in</div>
 
       <div class="hint">
-        <b>How the auto-mix works:</b> uploaded files are decoded in your browser; the DJ estimates each track's
-        <span class="mono">BPM</span>, then auto-crossfades into the next track near the end (with an optional low-pass
-        <span class="mono">FX sweep</span>). Turn on <span class="mono">BEATMATCH</span> and the incoming track's speed is
-        nudged to lock its tempo to the current one during the mix (pitch shifts slightly, like vinyl). YouTube tracks
-        play back-to-back with a volume crossfade only — their raw audio can't be analyzed, synced or visualized (DRM).
-        Everything runs locally; no song ever leaves your device.
+        <b>Pro auto-mix:</b> uploaded files are decoded in your browser and analyzed for <span class="mono">BPM</span>,
+        <span class="mono">beat grid</span> and loudness. Each transition then does what a real DJ does: an
+        <b>equal-power crossfade</b> (no volume dip), a <b>bass-swap</b> (the outgoing bassline drops as the new one
+        comes in, so kicks never clash), <b>loudness matching</b>, and a beat-aligned start. Add <span class="mono">BEATMATCH</span>
+        to also tempo-sync the incoming track (pitch shifts slightly, like vinyl), and <span class="mono">FX SWEEP</span> for a
+        filter-out. Hit <span class="mono">⏭</span> to trigger a mix on demand. YouTube tracks are volume-crossfade only
+        (DRM). Everything runs locally; no song ever leaves your device.
       </div>
     </div>
   </div>
@@ -670,21 +671,24 @@
 
       // two channels for crossfading (each can hold a file source OR a yt player)
       function makeChannel() {
-        const gain = ctx.createGain();
+        const gain = ctx.createGain();       // crossfade shape (0..1)
         gain.gain.value = 0;
-        // FX-sweep filter (used by the transition low-pass sweep)
+        const trim = ctx.createGain();       // per-track loudness normalization
+        trim.gain.value = 1;
+        // FX-sweep filter (transition low-pass sweep)
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 22000;
-        // 3-band EQ: bass (low shelf) → mid (peaking) → treble (high shelf)
+        // user 3-band EQ: bass (low shelf) → mid (peaking) → treble (high shelf)
         const eqLow = ctx.createBiquadFilter(); eqLow.type = 'lowshelf'; eqLow.frequency.value = 120;
         const eqMid = ctx.createBiquadFilter(); eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
         const eqHigh = ctx.createBiquadFilter(); eqHigh.type = 'highshelf'; eqHigh.frequency.value = 3200;
-        // chain: source → eqLow → eqMid → eqHigh → filter → gain → master
-        eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(filter);
-        filter.connect(gain);
-        gain.connect(master);
-        return { gain, filter, eqLow, eqMid, eqHigh, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, rate: 1, raf: 0 };
+        // dedicated bass-swap shelf for transitions (separate from user EQ)
+        const swapLow = ctx.createBiquadFilter(); swapLow.type = 'lowshelf'; swapLow.frequency.value = 200; swapLow.gain.value = 0;
+        // chain: source → eqLow → eqMid → eqHigh → swapLow → filter → gain → trim → master
+        eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(swapLow); swapLow.connect(filter);
+        filter.connect(gain); gain.connect(trim); trim.connect(master);
+        return { gain, trim, filter, eqLow, eqMid, eqHigh, swapLow, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, rate: 1, raf: 0 };
       }
       const chA = makeChannel();
       const chB = makeChannel();
@@ -781,6 +785,7 @@
           const est = estimateBeat(buf);
           t.bpm = est ? est.bpm : null;
           t.beatOffset = est ? est.offset : 0;
+          t.gainTrim = loudnessTrim(buf);       // normalize perceived loudness
           renderQueue();
           // if the user pressed play on this track before it finished decoding, start it now
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
@@ -850,6 +855,9 @@
         ch.rate = rate;
         ch.filter.frequency.cancelScheduledValues(ctx.currentTime);
         ch.filter.frequency.value = 22000;
+        ch.swapLow.gain.cancelScheduledValues(ctx.currentTime);
+        ch.swapLow.gain.value = 0;                              // full bass by default
+        ch.trim.gain.setValueAtTime(t.gainTrim || 1, ctx.currentTime);   // loudness match
         const startTime = when && when > ctx.currentTime ? when : ctx.currentTime;
         const off = bufOffset || 0;
         if (t.type === 'file') {
@@ -867,11 +875,11 @@
           ch.kind = 'yt'; ch.src = null; ch.rate = 1;
           startYtOnChannel(ch, t, fadeInNow);
         }
-        // fade in — timed to the scheduled start so it aligns with the beat
+        // fade in — equal-power curve, timed to the scheduled (beat-aligned) start
         if (ch.kind === 'file') {
           ch.gain.gain.cancelScheduledValues(ctx.currentTime);
           if (fadeInNow) { ch.gain.gain.setValueAtTime(1, startTime); }
-          else { ch.gain.gain.setValueAtTime(0.0001, startTime); ch.gain.gain.linearRampToValueAtTime(1, startTime + xfadeDur); }
+          else { ch.gain.gain.setValueCurveAtTime(CURVE_IN, startTime, xfadeDur); }
         }
         const effBpm = (t.bpm && ch.rate) ? Math.round(t.bpm * ch.rate) : t.bpm;
         npTitle.textContent = t.name;
@@ -935,21 +943,30 @@
 
         startOnChannel(to, next, false, rate, when, off);  // scheduled, tempo-synced, beat-aligned
 
-        // fade out + optional FX sweep on the outgoing track, timed to `when`
+        // fade out (equal-power) + bass-swap + optional FX sweep, timed to `when`
         if (from.kind === 'file') {
           from.gain.gain.cancelScheduledValues(ctx.currentTime);
-          from.gain.gain.setValueAtTime(from.gain.gain.value, when);
-          from.gain.gain.linearRampToValueAtTime(0.0001, when + xfadeDur);
+          from.gain.gain.setValueCurveAtTime(CURVE_OUT, when, xfadeDur);
+          // bass-swap: outgoing bass drops out; incoming bass rises in — no clashing kicks
+          const BASS_CUT = -24;
+          if (to.kind === 'file') {
+            to.swapLow.gain.cancelScheduledValues(ctx.currentTime);
+            to.swapLow.gain.setValueAtTime(BASS_CUT, when);
+            to.swapLow.gain.linearRampToValueAtTime(0, when + xfadeDur * 0.6);
+          }
+          from.swapLow.gain.cancelScheduledValues(ctx.currentTime);
+          from.swapLow.gain.setValueAtTime(0, when);
+          from.swapLow.gain.linearRampToValueAtTime(BASS_CUT, when + xfadeDur * 0.5);
           if (fxSweep) {
             from.filter.frequency.cancelScheduledValues(ctx.currentTime);
             from.filter.frequency.setValueAtTime(22000, when);
-            from.filter.frequency.exponentialRampToValueAtTime(300, when + xfadeDur);
+            from.filter.frequency.exponentialRampToValueAtTime(400, when + xfadeDur);
           }
         } else if (from.kind === 'yt' && from.yt) {
           ytVolRamp(from.yt, 100, 0, xfadeDur * 1000);
         }
 
-        if (bmSync) dzStatus(aligned ? '♫ beat-aligned mix' + (Math.abs(rate - 1) > 0.005 ? ' + tempo sync' : '') : 'mixing (beat grid unclear — plain crossfade)', false);
+        dzStatus('♫ pro mix — bass-swap' + (aligned ? ' · beat-aligned' : '') + (Math.abs(rate - 1) > 0.005 ? ' · tempo-synced' : ''), false);
 
         // swap roles
         active = to; idle = from;
@@ -1105,6 +1122,29 @@
           return { bpm: bpm, offset: bestPhase / eRate };
         } catch (e) { return null; }
       }
+
+      // perceived-loudness trim: quieter tracks come up, louder ones come down
+      function loudnessTrim(buffer) {
+        try {
+          const d = buffer.getChannelData(0);
+          const step = Math.max(1, Math.floor(d.length / 60000));
+          let sum = 0, n = 0;
+          for (let i = 0; i < d.length; i += step) { sum += d[i] * d[i]; n++; }
+          const rms = Math.sqrt(sum / (n || 1)) || 0.12;
+          return Math.max(0.45, Math.min(2.2, 0.14 / rms));   // ref RMS ≈ 0.14
+        } catch (e) { return 1; }
+      }
+
+      // equal-power crossfade curve (no volume dip in the middle)
+      function eqPowerCurve(rising) {
+        const n = 48, c = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const x = i / (n - 1);
+          c[i] = Math.max(0.0001, rising ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2));
+        }
+        return c;
+      }
+      const CURVE_IN = eqPowerCurve(true), CURVE_OUT = eqPowerCurve(false);
 
       /* ---------- YOUTUBE HOSTS (volume-crossfade only; audio can't be analyzed) ---------- */
       let ytReadyCbs = [];
