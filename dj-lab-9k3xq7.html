@@ -370,6 +370,24 @@
     }
 
     .dropzone.drag { border-color: var(--green); background: rgba(var(--green-rgb), 0.07); }
+
+    .browse-btn {
+      margin-top: 14px;
+      background: var(--green);
+      color: #001b08;
+      border: none;
+      border-radius: 6px;
+      padding: 11px 22px;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+
+    .browse-btn:hover { box-shadow: 0 0 20px rgba(var(--green-rgb), 0.5); }
+
+    .dz-status { margin-top: 12px; font-size: 12px; min-height: 15px; color: var(--green); }
+    .dz-status.err { color: #ff5f56; }
     .dropzone .dz-ico { font-size: 30px; }
     .dropzone h3 { margin: 10px 0 4px; font-weight: 600; }
     .dropzone p { color: #6f7d74; font-size: 14px; }
@@ -514,12 +532,14 @@
         <div class="dz-ico">🎵</div>
         <h3>Drop audio files to mix</h3>
         <p>MP3 / WAV / M4A / OGG — real beat-aware crossfade, EQ & visualizer. Nothing is uploaded.</p>
+        <button type="button" class="browse-btn" id="browse-btn">⬆ Browse files</button>
+        <div class="dz-status mono" id="dz-status"></div>
         <div class="or">— or paste a YouTube link (crossfade only) —</div>
         <div class="yt-add" onclick="event.stopPropagation()">
           <input id="yt-url" type="text" placeholder="https://youtube.com/watch?v=..." />
           <button id="yt-btn" type="button">ADD</button>
         </div>
-        <input id="file-input" type="file" accept="audio/*" multiple hidden />
+        <input id="file-input" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus" multiple hidden />
       </div>
 
       <div class="sec-title">
@@ -679,17 +699,32 @@
       async function addFiles(files) {
         const wasIdle = curIndex === -1;
         const firstNew = queue.length;
-        let added = 0;
+        let added = 0, skipped = 0;
         for (const f of files) {
-          if (!f.type.startsWith('audio/') && !/\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(f.name)) continue;
+          // accept audio/*, known audio extensions, OR unknown-type files (let decode try)
+          const looksAudio = f.type.startsWith('audio/') ||
+            /\.(mp3|wav|m4a|ogg|oga|flac|aac|opus|weba|aiff?)$/i.test(f.name) || f.type === '';
+          if (!looksAudio) { skipped++; continue; }
           const t = { id: uid++, name: f.name.replace(/\.[^.]+$/, ''), type: 'file', file: f, buffer: null, bpm: null, dur: 0 };
           queue.push(t);
           renderQueue();
           decodeTrack(t);
           added++;
         }
+        if (added) dzStatus('✓ added ' + added + ' track' + (added > 1 ? 's' : '') + ' — mixing…', false);
+        else dzStatus('✗ no audio files recognized' + (skipped ? ' (' + skipped + ' skipped)' : ''), true);
         // if nothing was playing, start the first newly-added track (plays once decoded)
         if (wasIdle && added) playIndex(firstNew);
+      }
+
+      const dzStatusEl = document.getElementById('dz-status');
+      let dzStatusTimer = 0;
+      function dzStatus(msg, isErr) {
+        if (!dzStatusEl) return;
+        dzStatusEl.textContent = msg;
+        dzStatusEl.className = 'dz-status mono' + (isErr ? ' err' : '');
+        clearTimeout(dzStatusTimer);
+        dzStatusTimer = setTimeout(() => { dzStatusEl.textContent = ''; }, 4000);
       }
 
       async function decodeTrack(t) {
@@ -705,6 +740,7 @@
         } catch (e) {
           t.name += '  (decode failed)';
           renderQueue();
+          dzStatus('✗ "' + t.name + '" could not be decoded — try MP3/WAV', true);
         }
       }
 
@@ -1016,7 +1052,10 @@
       /* ---------- UI WIRING ---------- */
       const dz = document.getElementById('dropzone');
       const fileInput = document.getElementById('file-input');
-      dz.addEventListener('click', () => fileInput.click());
+      const browseBtn = document.getElementById('browse-btn');
+      const openPicker = () => { if (ctx.state === 'suspended') ctx.resume(); fileInput.click(); };
+      browseBtn.addEventListener('click', e => { e.stopPropagation(); openPicker(); });
+      dz.addEventListener('click', openPicker);
       fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
 
       // Make the WHOLE window a drop target so dropping anywhere works and the
