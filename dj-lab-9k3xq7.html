@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI DJ // amirsam.lab</title>
+  <!-- keep this page out of search engines -->
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta name="theme-color" content="#00ff41" />
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23060908'/%3E%3Ctext x='12' y='46' font-family='monospace' font-size='38' font-weight='bold' fill='%2300ff41'%3E%E2%99%AB%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --green: #00ff41;
+      --green-rgb: 0, 255, 65;
+      --cyan: #00e5ff;
+      --yellow: #ffcc00;
+      --pink: #ff79c6;
+      --bg: #000;
+      --panel: #0a0c0b;
+      --line: #16201a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: #eafff0;
+      font-family: 'Rajdhani', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .mono { font-family: 'Share Tech Mono', monospace; }
+    a { color: var(--green); }
+
+    /* ---------- PASSWORD GATE ---------- */
+    #gate {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 18px;
+      padding: 24px;
+    }
+
+    #gate.hidden { display: none; }
+
+    #gate .lock {
+      font-size: 40px;
+      color: var(--green);
+      text-shadow: 0 0 24px rgba(var(--green-rgb), 0.5);
+    }
+
+    #gate h1 {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 15px;
+      letter-spacing: 3px;
+      color: #6f7d74;
+      text-transform: uppercase;
+    }
+
+    #gate form { display: flex; gap: 10px; width: min(360px, 90vw); }
+
+    #gate input {
+      flex: 1;
+      background: var(--panel);
+      border: 1px solid #1f3a29;
+      border-radius: 6px;
+      padding: 14px 16px;
+      color: #eafff0;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 15px;
+    }
+
+    #gate input:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(var(--green-rgb), 0.12);
+    }
+
+    #gate button {
+      background: var(--green);
+      color: #001b08;
+      border: none;
+      border-radius: 6px;
+      padding: 0 20px;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #gate .err {
+      color: #ff5f56;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      height: 14px;
+    }
+
+    /* ---------- APP ---------- */
+    #app { display: none; }
+    #app.live { display: block; }
+
+    header.bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 20;
+    }
+
+    header .brand {
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 2px;
+      color: var(--green);
+      font-size: 15px;
+    }
+
+    header .brand .sub { color: #4f6f5a; }
+
+    header .live-badge {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #6f7d74;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header .live-badge .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #2c4b38;
+    }
+
+    header .live-badge.on .dot {
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse { 50% { opacity: .3; } }
+
+    /* visualizer */
+    #viz-wrap {
+      position: relative;
+      height: 34vh;
+      min-height: 220px;
+      border-bottom: 1px solid var(--line);
+      background: radial-gradient(80% 120% at 50% 0%, rgba(var(--green-rgb), 0.06), transparent 60%);
+    }
+
+    #viz { display: block; width: 100%; height: 100%; }
+
+    .now-playing {
+      position: absolute;
+      left: 22px;
+      bottom: 18px;
+      max-width: 70%;
+    }
+
+    .now-playing .np-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--green);
+    }
+
+    .now-playing .np-title {
+      font-size: clamp(20px, 3.4vw, 34px);
+      font-weight: 700;
+      margin-top: 4px;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .now-playing .np-meta {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: #6f7d74;
+      margin-top: 6px;
+    }
+
+    .np-next {
+      position: absolute;
+      right: 22px;
+      bottom: 18px;
+      text-align: right;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: #4f6f5a;
+      max-width: 40%;
+    }
+
+    .np-next b { color: #b9c4bd; font-weight: normal; }
+
+    /* transport */
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+    }
+
+    .tbtn {
+      background: var(--panel);
+      border: 1px solid #1f3a29;
+      color: var(--green);
+      width: 46px;
+      height: 46px;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .18s ease;
+    }
+
+    .tbtn:hover { border-color: var(--green); box-shadow: 0 0 16px rgba(var(--green-rgb), 0.2); }
+    .tbtn.big { width: 58px; height: 58px; font-size: 22px; }
+    .tbtn.primary { background: var(--green); color: #001b08; border: none; }
+
+    .seek {
+      flex: 1;
+      min-width: 180px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .seek .time { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #6f7d74; min-width: 42px; }
+
+    .seek .track {
+      flex: 1;
+      height: 6px;
+      background: #11160f;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .seek .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #0a8f33, var(--green)); }
+
+    .automix {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: #b9c4bd;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle .sw {
+      width: 40px; height: 22px; border-radius: 12px;
+      background: #1a221c; position: relative; transition: background .2s;
+      border: 1px solid #26332a;
+    }
+
+    .toggle .sw::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #4f6f5a; transition: all .2s;
+    }
+
+    .toggle.on .sw { background: rgba(var(--green-rgb), 0.25); border-color: var(--green); }
+    .toggle.on .sw::after { left: 20px; background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+    .slider-wrap {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #6f7d74;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 110px; height: 4px; border-radius: 4px; background: #1a221c; outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--green); cursor: pointer; box-shadow: 0 0 8px rgba(var(--green-rgb), 0.5);
+    }
+
+    /* layout */
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 26px 22px 80px; }
+
+    .dropzone {
+      border: 1.5px dashed #26402f;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      transition: all .2s ease;
+      cursor: pointer;
+      background: rgba(var(--green-rgb), 0.02);
+    }
+
+    .dropzone.drag { border-color: var(--green); background: rgba(var(--green-rgb), 0.07); }
+    .dropzone .dz-ico { font-size: 30px; }
+    .dropzone h3 { margin: 10px 0 4px; font-weight: 600; }
+    .dropzone p { color: #6f7d74; font-size: 14px; }
+    .dropzone .or { margin: 14px 0; color: #3a4a40; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+
+    .yt-add { display: flex; gap: 10px; max-width: 520px; margin: 0 auto; }
+
+    .yt-add input {
+      flex: 1; background: #060908; border: 1px solid #1f2d24; border-radius: 6px;
+      padding: 11px 13px; color: #eafff0; font-family: 'Share Tech Mono', monospace; font-size: 13px;
+    }
+
+    .yt-add input:focus { outline: none; border-color: var(--green); }
+
+    .yt-add button {
+      background: var(--panel); border: 1px solid #1f3a29; color: var(--green);
+      border-radius: 6px; padding: 0 16px; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+    }
+
+    .sec-title {
+      font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--green); font-size: 12px; margin: 34px 0 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .sec-title .count { color: #4f6f5a; }
+    .sec-title button {
+      background: none; border: 1px solid #26332a; color: #6f7d74; border-radius: 4px;
+      font-family: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer;
+    }
+    .sec-title button:hover { color: var(--green); border-color: var(--green); }
+
+    /* queue */
+    #queue { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+
+    .qitem {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--panel); border: 1px solid var(--line);
+      border-left: 3px solid #1f2d24; border-radius: 7px;
+      padding: 12px 14px; transition: all .2s ease;
+    }
+
+    .qitem.playing { border-left-color: var(--green); background: #0c100e; box-shadow: -6px 0 24px rgba(var(--green-rgb), 0.07); }
+    .qitem .qnum { font-family: 'Share Tech Mono', monospace; color: #3a4a40; font-size: 12px; min-width: 22px; }
+    .qitem .qmain { flex: 1; min-width: 0; }
+    .qitem .qname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qitem .qsub { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #6f7d74; margin-top: 2px; }
+    .qitem .qtype { font-family: 'Share Tech Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 3px; border: 1px solid #1f4a2d; color: var(--green); }
+    .qitem .qtype.yt { color: var(--pink); border-color: #5a2f43; }
+    .qitem .qbtn { background: none; border: none; color: #4f6f5a; cursor: pointer; font-size: 15px; padding: 4px; }
+    .qitem .qbtn:hover { color: var(--green); }
+    .qitem .qbtn.del:hover { color: #ff5f56; }
+
+    .empty { color: #3a4a40; font-family: 'Share Tech Mono', monospace; font-size: 13px; text-align: center; padding: 20px; }
+
+    .hint {
+      margin-top: 40px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--panel); color: #6f7d74; font-size: 13px; line-height: 1.6;
+    }
+    .hint b { color: var(--green); }
+    .hint .mono { color: var(--cyan); }
+
+    #yt-hosts { position: fixed; left: -9999px; top: 0; }
+
+    @media (max-width: 640px) {
+      .now-playing { max-width: 60%; }
+      .np-next { display: none; }
+      .transport { gap: 10px; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===== PASSWORD GATE ===== -->
+  <div id="gate">
+    <div class="lock">🔒</div>
+    <h1>amirsam.lab — restricted</h1>
+    <form id="gate-form" autocomplete="off">
+      <input id="gate-input" type="password" placeholder="password" aria-label="password" autofocus />
+      <button type="submit">ENTER</button>
+    </form>
+    <div class="err mono" id="gate-err"></div>
+  </div>
+
+  <!-- ===== APP ===== -->
+  <div id="app">
+    <header class="bar">
+      <div class="brand">▶ AI_DJ <span class="sub">// amirsam.lab</span></div>
+      <div class="live-badge" id="live-badge"><span class="dot"></span><span id="live-text">idle</span></div>
+    </header>
+
+    <div id="viz-wrap">
+      <canvas id="viz"></canvas>
+      <div class="now-playing">
+        <div class="np-label">NOW MIXING</div>
+        <div class="np-title" id="np-title">— nothing loaded —</div>
+        <div class="np-meta" id="np-meta">add tracks below to start the set</div>
+      </div>
+      <div class="np-next" id="np-next"></div>
+    </div>
+
+    <div class="transport">
+      <button class="tbtn" id="btn-prev" title="previous">⏮</button>
+      <button class="tbtn big primary" id="btn-play" title="play / pause">▶</button>
+      <button class="tbtn" id="btn-next" title="skip / mix now">⏭</button>
+      <div class="seek">
+        <span class="time" id="t-cur">0:00</span>
+        <div class="track" id="seek-track"><div class="fill" id="seek-fill"></div></div>
+        <span class="time" id="t-dur">0:00</span>
+      </div>
+      <div class="automix">
+        <label class="toggle on" id="tg-automix"><span class="sw"></span> AUTO-MIX</label>
+        <label class="toggle on" id="tg-fx"><span class="sw"></span> FX SWEEP</label>
+        <span class="slider-wrap">XFADE <input type="range" id="xfade" min="2" max="16" value="8" /> <b id="xfade-val" style="color:var(--green)">8s</b></span>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="dropzone" id="dropzone">
+        <div class="dz-ico">🎵</div>
+        <h3>Drop audio files to mix</h3>
+        <p>MP3 / WAV / M4A / OGG — real beat-aware crossfade, EQ & visualizer. Nothing is uploaded.</p>
+        <div class="or">— or paste a YouTube link (crossfade only) —</div>
+        <div class="yt-add" onclick="event.stopPropagation()">
+          <input id="yt-url" type="text" placeholder="https://youtube.com/watch?v=..." />
+          <button id="yt-btn" type="button">ADD</button>
+        </div>
+        <input id="file-input" type="file" accept="audio/*" multiple hidden />
+      </div>
+
+      <div class="sec-title">
+        <span>QUEUE <span class="count" id="q-count">(0)</span></span>
+        <button id="btn-clear" type="button">clear all</button>
+      </div>
+      <ul id="queue"></ul>
+      <div class="empty" id="q-empty">// queue is empty — drop some tracks in</div>
+
+      <div class="hint">
+        <b>How the auto-mix works:</b> uploaded files are decoded in your browser; the DJ estimates each track's
+        <span class="mono">BPM</span>, then auto-crossfades into the next track near the end (with an optional low-pass
+        <span class="mono">FX sweep</span>). YouTube tracks play back-to-back with a volume crossfade only — their raw
+        audio can't be analyzed or visualized (DRM). Everything runs locally; no song ever leaves your device.
+      </div>
+    </div>
+  </div>
+
+  <div id="yt-hosts"></div>
+
+  <script>
+    'use strict';
+
+    /* ============================================================
+       PASSWORD GATE  (soft client-side lock — not real security)
+       Default password: amirsam-dj  → change PASS_SHA256 below.
+       To make a new hash, run in the console:
+         crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpass'))
+           .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+       ============================================================ */
+    const PASS_SHA256 = '27fd7d9dab6bea9bf3c46b72284e82a13a407d2b41ecfb4efe110e6e40ef715a';
+    const gate = document.getElementById('gate');
+    const app = document.getElementById('app');
+    const gateForm = document.getElementById('gate-form');
+    const gateInput = document.getElementById('gate-input');
+    const gateErr = document.getElementById('gate-err');
+
+    async function sha256(str) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function unlock() {
+      gate.classList.add('hidden');
+      app.classList.add('live');
+      try { sessionStorage.setItem('dj_unlocked', '1'); } catch (e) {}
+      initApp();
+    }
+
+    gateForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const h = await sha256(gateInput.value);
+      if (h === PASS_SHA256) { unlock(); }
+      else { gateErr.textContent = 'wrong password'; gateInput.value = ''; gateInput.focus(); }
+    });
+
+    // stay unlocked for the session
+    try { if (sessionStorage.getItem('dj_unlocked') === '1') unlock(); } catch (e) {}
+
+    /* ============================================================
+       AI DJ ENGINE
+       ============================================================ */
+    let appInited = false;
+    function initApp() {
+      if (appInited) return;
+      appInited = true;
+
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      const master = ctx.createGain();
+      master.gain.value = 1;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.82;
+      master.connect(analyser);
+      master.connect(ctx.destination);
+
+      // ---- state ----
+      let queue = [];          // {id, name, type:'file'|'yt', file?, url?, videoId?, buffer?, bpm?, dur}
+      let curIndex = -1;       // index of the track currently on the active channel
+      let playing = false;
+      let uid = 1;
+
+      // two channels for crossfading (each can hold a file source OR a yt player)
+      function makeChannel() {
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 22000;
+        filter.connect(gain);
+        gain.connect(master);
+        return { gain, filter, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, raf: 0 };
+      }
+      const chA = makeChannel();
+      const chB = makeChannel();
+      let active = chA, idle = chB;
+
+      // ---- elements ----
+      const el = id => document.getElementById(id);
+      const npTitle = el('np-title'), npMeta = el('np-meta'), npNext = el('np-next');
+      const qList = el('queue'), qEmpty = el('q-empty'), qCount = el('q-count');
+      const btnPlay = el('btn-play'), btnNext = el('btn-next'), btnPrev = el('btn-prev');
+      const seekFill = el('seek-fill'), tCur = el('t-cur'), tDur = el('t-dur');
+      const liveBadge = el('live-badge'), liveText = el('live-text');
+      const tgAuto = el('tg-automix'), tgFx = el('tg-fx');
+      const xfade = el('xfade'), xfadeVal = el('xfade-val');
+
+      let autoMix = true, fxSweep = true, xfadeDur = 8;
+
+      // ---- helpers ----
+      const fmt = s => { s = Math.max(0, s | 0); return (s / 60 | 0) + ':' + ('0' + (s % 60)).slice(-2); };
+
+      function setLive(on, txt) {
+        liveBadge.classList.toggle('on', on);
+        liveText.textContent = txt;
+      }
+
+      function renderQueue() {
+        qList.innerHTML = '';
+        qEmpty.style.display = queue.length ? 'none' : 'block';
+        qCount.textContent = '(' + queue.length + ')';
+        queue.forEach((t, i) => {
+          const li = document.createElement('li');
+          li.className = 'qitem' + (i === curIndex ? ' playing' : '');
+          li.innerHTML =
+            '<span class="qnum">' + (i === curIndex ? '▶' : (i + 1)) + '</span>' +
+            '<span class="qtype ' + (t.type === 'yt' ? 'yt' : '') + '">' + (t.type === 'yt' ? 'YT' : 'FILE') + '</span>' +
+            '<div class="qmain"><div class="qname">' + escapeHtml(t.name) + '</div>' +
+            '<div class="qsub">' + (t.type === 'yt' ? 'youtube · crossfade' : (t.bpm ? ('~' + t.bpm + ' BPM · ') : '') + (t.dur ? fmt(t.dur) : 'decoding…')) + '</div></div>' +
+            '<button class="qbtn play" title="play this" data-i="' + i + '">▶</button>' +
+            '<button class="qbtn del" title="remove" data-i="' + i + '">✕</button>';
+          qList.appendChild(li);
+        });
+        qList.querySelectorAll('.qbtn.play').forEach(b => b.onclick = () => playIndex(+b.dataset.i));
+        qList.querySelectorAll('.qbtn.del').forEach(b => b.onclick = () => removeTrack(+b.dataset.i));
+        updateNext();
+      }
+
+      function updateNext() {
+        const n = queue[curIndex + 1];
+        npNext.innerHTML = n ? ('UP NEXT<br><b>' + escapeHtml(n.name) + '</b>') : '';
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      }
+
+      /* ---------- ADDING TRACKS ---------- */
+      async function addFiles(files) {
+        for (const f of files) {
+          if (!f.type.startsWith('audio/') && !/\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(f.name)) continue;
+          const t = { id: uid++, name: f.name.replace(/\.[^.]+$/, ''), type: 'file', file: f, buffer: null, bpm: null, dur: 0 };
+          queue.push(t);
+          renderQueue();
+          decodeTrack(t);
+        }
+        if (curIndex === -1 && queue.length) { /* wait for decode to autoplay */ }
+      }
+
+      async function decodeTrack(t) {
+        try {
+          const arr = await t.file.arrayBuffer();
+          const buf = await ctx.decodeAudioData(arr.slice(0));
+          t.buffer = buf;
+          t.dur = buf.duration;
+          t.bpm = estimateBPM(buf);
+          renderQueue();
+          // if the user pressed play on this track before it finished decoding, start it now
+          if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
+        } catch (e) {
+          t.name += '  (decode failed)';
+          renderQueue();
+        }
+      }
+
+      let pendingPlayId = null;
+
+      function addYouTube(url) {
+        const id = parseYouTubeId(url);
+        if (!id) { flashYtError(); return; }
+        const t = { id: uid++, name: 'YouTube · ' + id, type: 'yt', videoId: id, dur: 0 };
+        queue.push(t);
+        renderQueue();
+        fetchYtTitle(id, t);
+        ensureYT();
+      }
+
+      function parseYouTubeId(url) {
+        const m = String(url).match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+        return m ? m[1] : (/^[A-Za-z0-9_-]{11}$/.test(url.trim()) ? url.trim() : null);
+      }
+
+      function fetchYtTitle(id, t) {
+        fetch('https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + id)
+          .then(r => r.json()).then(j => { if (j && j.title) { t.name = j.title; renderQueue(); } })
+          .catch(() => {});
+      }
+
+      function removeTrack(i) {
+        if (i === curIndex) { stopChannel(active); }
+        queue.splice(i, 1);
+        if (i < curIndex) curIndex--;
+        else if (i === curIndex) { curIndex = -1; playing = false; btnPlay.textContent = '▶'; setLive(false, 'idle'); npTitle.textContent = '— nothing loaded —'; npMeta.textContent = 'add tracks below to start the set'; }
+        renderQueue();
+      }
+
+      /* ---------- PLAYBACK ---------- */
+      function playIndex(i) {
+        if (i < 0 || i >= queue.length) return;
+        if (ctx.state === 'suspended') ctx.resume();
+        // hard cut: stop both channels, start fresh on active
+        stopChannel(active); stopChannel(idle);
+        curIndex = i;
+        playing = true;
+        btnPlay.textContent = '⏸';
+        const t = queue[i];
+        if (t.type === 'file' && !t.buffer) {
+          // not decoded yet — mark pending; decodeTrack() will start it
+          pendingPlayId = t.id;
+          npTitle.textContent = t.name;
+          npMeta.textContent = 'decoding…';
+          setLive(true, 'loading');
+        } else {
+          startOnChannel(active, t, true);
+        }
+        renderQueue();
+      }
+
+      function startOnChannel(ch, t, fadeInNow) {
+        ch.item = t;
+        ch.filter.frequency.cancelScheduledValues(ctx.currentTime);
+        ch.filter.frequency.value = 22000;
+        if (t.type === 'file') {
+          if (!t.buffer) { pendingPlayId = t.id; return; }
+          const src = ctx.createBufferSource();
+          src.buffer = t.buffer;
+          src.connect(ch.filter);
+          ch.src = src; ch.yt = null; ch.kind = 'file';
+          ch.dur = t.buffer.duration; ch.offset = 0; ch.startAt = ctx.currentTime;
+          src.start(0);
+          src.onended = () => { if (ch.item === t && ch.kind === 'file') onTrackEndedNatural(ch); };
+        } else {
+          ch.kind = 'yt'; ch.src = null;
+          startYtOnChannel(ch, t, fadeInNow);
+        }
+        // fade in (file channels use the gain node; yt is handled via volume ramps)
+        if (ch.kind === 'file') {
+          const now = ctx.currentTime;
+          ch.gain.gain.cancelScheduledValues(now);
+          if (fadeInNow) { ch.gain.gain.setValueAtTime(1, now); }
+          else { ch.gain.gain.setValueAtTime(0.0001, now); ch.gain.gain.linearRampToValueAtTime(1, now + xfadeDur); }
+        }
+        npTitle.textContent = t.name;
+        npMeta.textContent = (t.type === 'yt' ? 'youtube' : (t.bpm ? '~' + t.bpm + ' BPM' : '') + (t.dur ? ' · ' + fmt(t.dur) : ''));
+        setLive(true, t.type === 'yt' ? 'playing (yt)' : 'mixing');
+      }
+
+      function stopChannel(ch) {
+        try { if (ch.src) { ch.src.onended = null; ch.src.stop(); } } catch (e) {}
+        try { if (ch.yt) { ch.yt.stopVideo(); } } catch (e) {}
+        ch.src = null; ch.yt = null; ch.item = null; ch.kind = null;
+        ch.gain.gain.cancelScheduledValues(ctx.currentTime);
+        ch.gain.gain.value = 0;
+      }
+
+      function onTrackEndedNatural(ch) {
+        // fired if a file reached its end without an auto-crossfade having advanced us
+        if (!crossfading) advance(true);
+      }
+
+      let crossfading = false;
+      function beginCrossfade() {
+        const next = queue[curIndex + 1];
+        if (!next) return;
+        crossfading = true;
+        const from = active, to = idle;
+        startOnChannel(to, next, false);        // fades in over xfadeDur
+        // fade out + optional FX sweep on the outgoing track
+        const now = ctx.currentTime;
+        if (from.kind === 'file') {
+          from.gain.gain.cancelScheduledValues(now);
+          from.gain.gain.setValueAtTime(from.gain.gain.value, now);
+          from.gain.gain.linearRampToValueAtTime(0.0001, now + xfadeDur);
+          if (fxSweep) {
+            from.filter.frequency.cancelScheduledValues(now);
+            from.filter.frequency.setValueAtTime(22000, now);
+            from.filter.frequency.exponentialRampToValueAtTime(300, now + xfadeDur);
+          }
+        } else if (from.kind === 'yt' && from.yt) {
+          ytVolRamp(from.yt, 100, 0, xfadeDur * 1000);
+        }
+        // swap roles
+        active = to; idle = from;
+        curIndex++;
+        renderQueue();
+        setTimeout(() => { stopChannel(idle); crossfading = false; }, xfadeDur * 1000 + 200);
+      }
+
+      function advance(auto) {
+        if (curIndex + 1 < queue.length) {
+          if (auto && autoMix) beginCrossfade();
+          else playIndex(curIndex + 1);
+        } else {
+          // end of set
+          stopChannel(active); stopChannel(idle);
+          playing = false; btnPlay.textContent = '▶'; setLive(false, 'set ended');
+          npMeta.textContent = 'end of set — add more tracks';
+        }
+      }
+
+      /* ---------- TRANSPORT ---------- */
+      btnPlay.onclick = () => {
+        if (ctx.state === 'suspended') ctx.resume();
+        if (curIndex === -1) {
+          if (queue.length) playIndex(0);   // playIndex handles not-yet-decoded files
+          return;
+        }
+        if (playing) { pauseAll(); } else { resumeAll(); }
+      };
+      btnNext.onclick = () => { if (curIndex !== -1) advance(false); else if (queue.length) playIndex(0); };
+      btnPrev.onclick = () => { if (curIndex > 0) playIndex(curIndex - 1); else if (curIndex === 0) playIndex(0); };
+
+      let pausedAt = 0;
+      function pauseAll() {
+        playing = false; btnPlay.textContent = '▶'; setLive(false, 'paused');
+        if (active.kind === 'file') { ctx.suspend(); }
+        else if (active.yt) { try { active.yt.pauseVideo(); } catch (e) {} }
+      }
+      function resumeAll() {
+        playing = true; btnPlay.textContent = '⏸'; setLive(true, 'mixing');
+        if (active.kind === 'file') { ctx.resume(); }
+        else if (active.yt) { try { active.yt.playVideo(); } catch (e) {} }
+      }
+
+      /* ---------- PROGRESS + AUTO-MIX TRIGGER ---------- */
+      function tick() {
+        requestAnimationFrame(tick);
+        let cur = 0, dur = 0;
+        if (active.kind === 'file' && active.item && active.item.buffer) {
+          dur = active.dur;
+          // ctx.currentTime is frozen while suspended (paused), so this stays correct
+          cur = ctx.currentTime - active.startAt;
+        } else if (active.kind === 'yt' && active.yt && active.yt.getDuration) {
+          try { dur = active.yt.getDuration() || 0; cur = active.yt.getCurrentTime() || 0; } catch (e) {}
+        }
+        if (dur > 0) {
+          seekFill.style.width = Math.min(100, cur / dur * 100) + '%';
+          tCur.textContent = fmt(cur); tDur.textContent = fmt(dur);
+          // trigger auto-crossfade near the end
+          if (autoMix && playing && !crossfading && queue[curIndex + 1] && (dur - cur) <= xfadeDur && cur > 1) {
+            beginCrossfade();
+          }
+        }
+        drawViz();
+      }
+
+      /* ---------- VISUALIZER ---------- */
+      const canvas = document.getElementById('viz');
+      const g = canvas.getContext('2d');
+      function sizeCanvas() {
+        canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
+        canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+      }
+      window.addEventListener('resize', sizeCanvas); sizeCanvas();
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+
+      function drawViz() {
+        const W = canvas.width, H = canvas.height;
+        g.clearRect(0, 0, W, H);
+        analyser.getByteFrequencyData(freq);
+        // if YT is active there's no real data → synth a gentle animation
+        const ytActive = active.kind === 'yt' && playing;
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--green').trim() || '#00ff41';
+        const bars = 64;
+        const bw = W / bars;
+        for (let i = 0; i < bars; i++) {
+          let v;
+          if (ytActive) {
+            v = (Math.sin(Date.now() / 240 + i * 0.5) * 0.5 + 0.5) * (0.35 + 0.4 * Math.sin(i / bars * Math.PI));
+          } else {
+            v = freq[i * 2] / 255;
+          }
+          const h = Math.max(2, v * H * 0.9);
+          const x = i * bw;
+          const grad = g.createLinearGradient(0, H, 0, H - h);
+          grad.addColorStop(0, 'rgba(' + (getComputedStyle(document.documentElement).getPropertyValue('--green-rgb').trim() || '0,255,65') + ',0.25)');
+          grad.addColorStop(1, accent);
+          g.fillStyle = grad;
+          g.fillRect(x + bw * 0.15, H - h, bw * 0.7, h);
+        }
+      }
+      tick();
+
+      /* ---------- BPM ESTIMATE (lightweight) ---------- */
+      function estimateBPM(buffer) {
+        try {
+          const rate = buffer.sampleRate;
+          const data = buffer.getChannelData(0);
+          // downsample envelope
+          const step = Math.floor(rate / 200);         // ~200 Hz envelope
+          const env = [];
+          for (let i = 0; i < data.length; i += step) {
+            let peak = 0;
+            for (let j = 0; j < step && i + j < data.length; j++) { const a = Math.abs(data[i + j]); if (a > peak) peak = a; }
+            env.push(peak);
+          }
+          const eRate = 200;
+          // find peaks above threshold
+          const thr = 0.55 * Math.max.apply(null, env);
+          const peaks = [];
+          for (let i = 1; i < env.length - 1; i++) {
+            if (env[i] > thr && env[i] >= env[i - 1] && env[i] > env[i + 1]) { peaks.push(i); i += 6; }
+          }
+          if (peaks.length < 4) return null;
+          const gaps = {};
+          for (let i = 1; i < peaks.length; i++) {
+            let bpm = 60 * eRate / (peaks[i] - peaks[i - 1]);
+            while (bpm < 90) bpm *= 2; while (bpm > 180) bpm /= 2;
+            bpm = Math.round(bpm);
+            gaps[bpm] = (gaps[bpm] || 0) + 1;
+          }
+          let best = null, bestC = 0;
+          for (const k in gaps) if (gaps[k] > bestC) { bestC = gaps[k]; best = +k; }
+          return best;
+        } catch (e) { return null; }
+      }
+
+      /* ---------- YOUTUBE HOSTS (volume-crossfade only; audio can't be analyzed) ---------- */
+      let ytReadyCbs = [];
+      function ensureYT(cb) {
+        if (window.YT && window.YT.Player) { if (cb) cb(); return; }
+        if (cb) ytReadyCbs.push(cb);
+        if (document.getElementById('yt-api')) return;
+        const s = document.createElement('script'); s.id = 'yt-api'; s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+        window.onYouTubeIframeAPIReady = () => { ytReadyCbs.forEach(fn => fn()); ytReadyCbs = []; };
+      }
+      const ytHosts = document.getElementById('yt-hosts');
+
+      // create (once) a persistent YT.Player bound to a channel
+      function ensureYtPlayer(ch, onReady) {
+        if (ch._ytPlayer && ch._ytReady) { onReady(ch._ytPlayer); return; }
+        if (ch._ytPlayer) { ch._ytOnReady = onReady; return; }
+        ensureYT(function () {
+          const div = document.createElement('div'); ytHosts.appendChild(div);
+          ch._ytPlayer = new YT.Player(div, {
+            height: '200', width: '200',
+            playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1 },
+            events: {
+              onReady: () => { ch._ytReady = true; const f = ch._ytOnReady || onReady; ch._ytOnReady = null; if (f) f(ch._ytPlayer); },
+              onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED && ch === active && !crossfading) advance(true); }
+            }
+          });
+          ch._ytOnReady = onReady;
+        });
+      }
+
+      function startYtOnChannel(ch, t, fadeInNow) {
+        ch.dur = 0;
+        ensureYtPlayer(ch, function (p) {
+          ch.yt = p;
+          try {
+            p.loadVideoById(t.videoId);
+            p.setVolume(fadeInNow ? 100 : 0);
+            p.playVideo();
+            if (!fadeInNow) ytVolRamp(p, 0, 100, xfadeDur * 1000);
+          } catch (e) {}
+        });
+      }
+
+      function ytVolRamp(player, from, to, ms) {
+        if (!player || !player.setVolume) return;
+        const steps = 24, dt = Math.max(20, ms / steps); let i = 0;
+        const iv = setInterval(() => {
+          i++; const v = from + (to - from) * (i / steps);
+          try { player.setVolume(Math.max(0, Math.min(100, v))); } catch (e) {}
+          if (i >= steps) clearInterval(iv);
+        }, dt);
+      }
+
+      /* ---------- UI WIRING ---------- */
+      const dz = document.getElementById('dropzone');
+      const fileInput = document.getElementById('file-input');
+      dz.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
+      ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+      ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+      dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
+
+      const ytUrl = document.getElementById('yt-url'), ytBtn = document.getElementById('yt-btn');
+      ytBtn.onclick = () => { if (ytUrl.value.trim()) { addYouTube(ytUrl.value.trim()); ytUrl.value = ''; } };
+      ytUrl.addEventListener('keydown', e => { if (e.key === 'Enter') ytBtn.click(); });
+      function flashYtError() { ytUrl.style.borderColor = '#ff5f56'; setTimeout(() => ytUrl.style.borderColor = '', 1200); }
+
+      document.getElementById('btn-clear').onclick = () => {
+        stopChannel(active); stopChannel(idle);
+        queue = []; curIndex = -1; playing = false; btnPlay.textContent = '▶';
+        setLive(false, 'idle'); npTitle.textContent = '— nothing loaded —'; npMeta.textContent = 'add tracks below to start the set';
+        renderQueue();
+      };
+
+      tgAuto.onclick = () => { autoMix = !autoMix; tgAuto.classList.toggle('on', autoMix); };
+      tgFx.onclick = () => { fxSweep = !fxSweep; tgFx.classList.toggle('on', fxSweep); };
+      xfade.oninput = () => { xfadeDur = +xfade.value; xfadeVal.textContent = xfadeDur + 's'; };
+
+      // keyboard: space = play/pause, → skip
+      document.addEventListener('keydown', e => {
+        if (e.target.tagName === 'INPUT') return;
+        if (e.code === 'Space') { e.preventDefault(); btnPlay.click(); }
+        else if (e.code === 'ArrowRight') btnNext.click();
+        else if (e.code === 'ArrowLeft') btnPrev.click();
+      });
+
+      renderQueue();
+      setLive(false, 'idle');
+    }
+  </script>
+</body>
+
+</html>
