@@ -577,6 +577,23 @@
   <script>
     'use strict';
 
+    /* on-screen error banner so any failure is visible (helps remote debugging) */
+    (function () {
+      function banner(msg) {
+        let b = document.getElementById('err-banner');
+        if (!b) {
+          b = document.createElement('div');
+          b.id = 'err-banner';
+          b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:#ff5f56;color:#000;font-family:monospace;font-size:13px;padding:10px 14px;white-space:pre-wrap';
+          document.addEventListener('DOMContentLoaded', () => document.body.appendChild(b));
+          if (document.body) document.body.appendChild(b);
+        }
+        b.textContent = '⚠ ' + msg;
+      }
+      window.addEventListener('error', e => banner((e.message || 'error') + '  @' + (e.filename || '').split('/').pop() + ':' + e.lineno));
+      window.addEventListener('unhandledrejection', e => banner('promise: ' + (e.reason && e.reason.message || e.reason)));
+    })();
+
     /* ============================================================
        PASSWORD GATE  (soft client-side lock — not real security)
        The password is stored only as a SHA-256 hash below (plaintext not in source).
@@ -1070,6 +1087,8 @@
       // resume audio on the resulting change event so playback is allowed.
       fileInput.addEventListener('change', e => {
         if (ctx.state === 'suspended') ctx.resume();
+        const picked = e.target.files ? e.target.files.length : 0;
+        dzStatus('picked ' + picked + ' file(s)…', false);
         addFiles([...e.target.files]);
         fileInput.value = '';
       });
