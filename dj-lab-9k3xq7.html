@@ -260,6 +260,7 @@
     }
 
     .seek .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #0a8f33, var(--green)); }
+    .seek .mix-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--pink); box-shadow: 0 0 8px var(--pink); display: none; transform: translateX(-1px); }
 
     .automix {
       display: flex;
@@ -527,11 +528,12 @@
       <button class="tbtn" id="btn-next" title="skip / mix now">⏭</button>
       <div class="seek">
         <span class="time" id="t-cur">0:00</span>
-        <div class="track" id="seek-track"><div class="fill" id="seek-fill"></div></div>
+        <div class="track" id="seek-track"><div class="fill" id="seek-fill"></div><div class="mix-marker" id="mix-marker" title="AI mix-out point"></div></div>
         <span class="time" id="t-dur">0:00</span>
       </div>
       <div class="automix">
         <label class="toggle on" id="tg-automix"><span class="sw"></span> AUTO-MIX</label>
+        <label class="toggle on" id="tg-smart"><span class="sw"></span> SMART MIX</label>
         <label class="toggle" id="tg-sync"><span class="sw"></span> BEATMATCH</label>
         <label class="toggle on" id="tg-fx"><span class="sw"></span> FX SWEEP</label>
         <span class="slider-wrap">XFADE <input type="range" id="xfade" min="2" max="16" value="8" /> <b id="xfade-val" style="color:var(--green)">8s</b></span>
@@ -717,12 +719,12 @@
       const npTitle = el('np-title'), npMeta = el('np-meta'), npNext = el('np-next');
       const qList = el('queue'), qEmpty = el('q-empty'), qCount = el('q-count');
       const btnPlay = el('btn-play'), btnNext = el('btn-next'), btnPrev = el('btn-prev');
-      const seekFill = el('seek-fill'), tCur = el('t-cur'), tDur = el('t-dur');
+      const seekFill = el('seek-fill'), tCur = el('t-cur'), tDur = el('t-dur'), mixMarker = el('mix-marker');
       const liveBadge = el('live-badge'), liveText = el('live-text');
-      const tgAuto = el('tg-automix'), tgFx = el('tg-fx'), tgSync = el('tg-sync');
+      const tgAuto = el('tg-automix'), tgFx = el('tg-fx'), tgSync = el('tg-sync'), tgSmart = el('tg-smart');
       const xfade = el('xfade'), xfadeVal = el('xfade-val');
 
-      let autoMix = true, fxSweep = true, xfadeDur = 8, bmSync = false, autoEqOn = true;
+      let autoMix = true, fxSweep = true, xfadeDur = 8, bmSync = false, autoEqOn = true, smartMix = true;
 
       // ---- helpers ----
       const fmt = s => { s = Math.max(0, s | 0); return (s / 60 | 0) + ':' + ('0' + (s % 60)).slice(-2); };
@@ -821,11 +823,13 @@
           const loud = analyzeLoudness(buf);
           t.gainTrim = loud.trim; t.energy = loud.energy;
           t.autoEq = autoEqFor(buf);
+          t.envWin = 1; t.env = energyEnvelope(buf, t.envWin);   // energy over time → smart mix points
           // if this track is already on a deck, apply the freshly-computed trim + auto-EQ live
           [active, idle].forEach(ch => {
             if (ch.item === t) {
               ch.trim.gain.setTargetAtTime(t.gainTrim || 1, ctx.currentTime, 0.1);
               applyAutoEq(ch, t);
+              computeMixOut(ch);            // now that we know the energy shape, pick the mix point
             }
           });
           renderQueue();
@@ -931,6 +935,7 @@
         npMeta.textContent = (t.type === 'yt' ? 'youtube'
           : (effBpm ? '~' + effBpm + ' BPM' + (Math.abs(ch.rate - 1) > 0.005 ? ' (synced)' : '') : '') + (t.dur ? ' · ' + fmt(t.dur) : ''));
         setLive(true, t.type === 'yt' ? 'playing (yt)' : 'mixing');
+        computeMixOut(ch);        // pick where to mix out (smart point if analyzed, else near end)
       }
 
       function stopChannel(ch) {
@@ -944,6 +949,21 @@
       function onTrackEndedNatural(ch) {
         // fired if a file reached its end without an auto-crossfade having advanced us
         if (!crossfading) advance(true);
+      }
+
+      // decide the real-time moment to start mixing OUT of this channel
+      function computeMixOut(ch) {
+        if (!ch.item || ch.kind !== 'file') { ch.mixOutReal = Infinity; return; }
+        const endReal = ch.startAt + ch.dur - xfadeDur;      // fallback: near the end
+        let out = endReal;
+        if (smartMix && ch.item.env && ch.item.env.length > 8) {
+          const tt = findMixOut(ch.item.env, ch.item.envWin, ch.item.buffer.duration, xfadeDur * ch.rate);
+          let smart = ch.startAt + (tt - ch.offset) / ch.rate;
+          const minReal = ch.startAt + ch.dur * 0.40;
+          const maxReal = ch.startAt + ch.dur - 2;
+          out = Math.max(minReal, Math.min(maxReal, smart));
+        }
+        ch.mixOutReal = out;
       }
 
       let crossfading = false;
@@ -1078,9 +1098,18 @@
         if (dur > 0) {
           seekFill.style.width = Math.min(100, cur / dur * 100) + '%';
           tCur.textContent = fmt(cur); tDur.textContent = fmt(dur);
-          // trigger auto-crossfade near the end
-          if (autoMix && playing && !crossfading && queue[curIndex + 1] && (dur - cur) <= xfadeDur && cur > 1) {
-            beginCrossfade();
+          // position the smart mix-point marker on the seek bar
+          if (active.kind === 'file' && isFinite(active.mixOutReal)) {
+            const frac = (active.mixOutReal - active.startAt) / active.dur;
+            mixMarker.style.left = Math.max(0, Math.min(100, frac * 100)) + '%';
+            mixMarker.style.display = 'block';
+          } else { mixMarker.style.display = 'none'; }
+          // trigger the mix at the chosen point (smart for files, near-end for YT)
+          if (autoMix && playing && !crossfading && queue[curIndex + 1] && cur > 2) {
+            const hit = active.kind === 'file'
+              ? ctx.currentTime >= active.mixOutReal
+              : (dur - cur) <= xfadeDur;
+            if (hit) beginCrossfade();
           }
         }
         drawViz();
@@ -1208,6 +1237,35 @@
             high: Math.round(clamp(5 * Math.log10(refH / sHigh), -6, 6))
           };
         } catch (e) { return { low: 0, mid: 0, high: 0 }; }
+      }
+
+      // energy over time (RMS per ~1s window) — used to find good mix points
+      function energyEnvelope(buffer, winSec) {
+        const sr = buffer.sampleRate, d = buffer.getChannelData(0);
+        const win = Math.max(1, Math.floor(sr * winSec)), env = [];
+        for (let i = 0; i < d.length; i += win) {
+          let s = 0, n = 0;
+          for (let j = i; j < i + win && j < d.length; j++) { s += d[j] * d[j]; n++; }
+          env.push(Math.sqrt(s / (n || 1)));
+        }
+        return env;
+      }
+      // track-time (s) where the AI should start mixing out: a dip/outro in the back half,
+      // else just before the end. Keeps the mix landing on the track's quieter section.
+      function findMixOut(env, winSec, dur, leadSec) {
+        const n = env.length;
+        if (n < 8) return Math.max(0, dur - leadSec - 1);
+        let sum = 0; for (const v of env) sum += v; const avg = sum / n;
+        // scan from 62% onward for the first sustained low-energy window (breakdown/outro)
+        const from = Math.floor(n * 0.62);
+        let point = -1;
+        for (let i = from; i < n - 1; i++) {
+          if (env[i] < 0.62 * avg && env[i + 1] < 0.72 * avg) { point = i; break; }
+        }
+        let tOut = point >= 0 ? point * winSec : (dur - leadSec - 1);
+        // keep it sensible: not in the first 40%, and leave a couple seconds at the end
+        tOut = Math.max(dur * 0.40, Math.min(dur - 2, tOut));
+        return tOut;
       }
 
       // equal-power crossfade curve (no volume dip in the middle)
@@ -1407,7 +1465,15 @@
         bmSync = !bmSync; tgSync.classList.toggle('on', bmSync);
         dzStatus(bmSync ? '♫ beatmatch ON — next mix will tempo-sync' : 'beatmatch off', false);
       };
-      xfade.oninput = () => { xfadeDur = +xfade.value; xfadeVal.textContent = xfadeDur + 's'; };
+      tgSmart.onclick = () => {
+        smartMix = !smartMix; tgSmart.classList.toggle('on', smartMix);
+        computeMixOut(active); computeMixOut(idle);   // recompute the mix point
+        dzStatus(smartMix ? '✨ smart mix points ON — mixing on breakdowns/outros' : 'smart mix off — mixing at track end', false);
+      };
+      xfade.oninput = () => {
+        xfadeDur = +xfade.value; xfadeVal.textContent = xfadeDur + 's';
+        computeMixOut(active); computeMixOut(idle);    // xfade length affects the mix point
+      };
 
       // ---- 3-band EQ (applies live to both channels' file audio) ----
       const eqLowS = el('eq-low'), eqMidS = el('eq-mid'), eqHighS = el('eq-high');
