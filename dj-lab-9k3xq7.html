@@ -677,14 +677,19 @@
 
       /* ---------- ADDING TRACKS ---------- */
       async function addFiles(files) {
+        const wasIdle = curIndex === -1;
+        const firstNew = queue.length;
+        let added = 0;
         for (const f of files) {
           if (!f.type.startsWith('audio/') && !/\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(f.name)) continue;
           const t = { id: uid++, name: f.name.replace(/\.[^.]+$/, ''), type: 'file', file: f, buffer: null, bpm: null, dur: 0 };
           queue.push(t);
           renderQueue();
           decodeTrack(t);
+          added++;
         }
-        if (curIndex === -1 && queue.length) { /* wait for decode to autoplay */ }
+        // if nothing was playing, start the first newly-added track (plays once decoded)
+        if (wasIdle && added) playIndex(firstNew);
       }
 
       async function decodeTrack(t) {
@@ -1013,9 +1018,20 @@
       const fileInput = document.getElementById('file-input');
       dz.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
-      ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
-      ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
-      dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
+
+      // Make the WHOLE window a drop target so dropping anywhere works and the
+      // browser never navigates to the file. Highlight the zone while dragging.
+      let dragDepth = 0;
+      window.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; dz.classList.add('drag'); });
+      window.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+      window.addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dz.classList.remove('drag'); } });
+      window.addEventListener('drop', e => {
+        e.preventDefault();
+        dragDepth = 0; dz.classList.remove('drag');
+        if (ctx.state === 'suspended') ctx.resume();
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length) addFiles([...files]);
+      });
 
       const ytUrl = document.getElementById('yt-url'), ytBtn = document.getElementById('yt-btn');
       ytBtn.onclick = () => { if (ytUrl.value.trim()) { addYouTube(ytUrl.value.trim()); ytUrl.value = ''; } };
