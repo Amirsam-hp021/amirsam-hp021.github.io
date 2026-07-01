@@ -514,6 +514,7 @@
       </div>
       <div class="automix">
         <label class="toggle on" id="tg-automix"><span class="sw"></span> AUTO-MIX</label>
+        <label class="toggle" id="tg-sync"><span class="sw"></span> BEATMATCH</label>
         <label class="toggle on" id="tg-fx"><span class="sw"></span> FX SWEEP</label>
         <span class="slider-wrap">XFADE <input type="range" id="xfade" min="2" max="16" value="8" /> <b id="xfade-val" style="color:var(--green)">8s</b></span>
       </div>
@@ -566,8 +567,10 @@
       <div class="hint">
         <b>How the auto-mix works:</b> uploaded files are decoded in your browser; the DJ estimates each track's
         <span class="mono">BPM</span>, then auto-crossfades into the next track near the end (with an optional low-pass
-        <span class="mono">FX sweep</span>). YouTube tracks play back-to-back with a volume crossfade only — their raw
-        audio can't be analyzed or visualized (DRM). Everything runs locally; no song ever leaves your device.
+        <span class="mono">FX sweep</span>). Turn on <span class="mono">BEATMATCH</span> and the incoming track's speed is
+        nudged to lock its tempo to the current one during the mix (pitch shifts slightly, like vinyl). YouTube tracks
+        play back-to-back with a volume crossfade only — their raw audio can't be analyzed, synced or visualized (DRM).
+        Everything runs locally; no song ever leaves your device.
       </div>
     </div>
   </div>
@@ -670,7 +673,7 @@
         eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(filter);
         filter.connect(gain);
         gain.connect(master);
-        return { gain, filter, eqLow, eqMid, eqHigh, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, raf: 0 };
+        return { gain, filter, eqLow, eqMid, eqHigh, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, rate: 1, raf: 0 };
       }
       const chA = makeChannel();
       const chB = makeChannel();
@@ -683,10 +686,10 @@
       const btnPlay = el('btn-play'), btnNext = el('btn-next'), btnPrev = el('btn-prev');
       const seekFill = el('seek-fill'), tCur = el('t-cur'), tDur = el('t-dur');
       const liveBadge = el('live-badge'), liveText = el('live-text');
-      const tgAuto = el('tg-automix'), tgFx = el('tg-fx');
+      const tgAuto = el('tg-automix'), tgFx = el('tg-fx'), tgSync = el('tg-sync');
       const xfade = el('xfade'), xfadeVal = el('xfade-val');
 
-      let autoMix = true, fxSweep = true, xfadeDur = 8;
+      let autoMix = true, fxSweep = true, xfadeDur = 8, bmSync = false;
 
       // ---- helpers ----
       const fmt = s => { s = Math.max(0, s | 0); return (s / 60 | 0) + ':' + ('0' + (s % 60)).slice(-2); };
@@ -828,21 +831,25 @@
         renderQueue();
       }
 
-      function startOnChannel(ch, t, fadeInNow) {
+      function startOnChannel(ch, t, fadeInNow, rate) {
+        rate = rate || 1;
         ch.item = t;
+        ch.rate = rate;
         ch.filter.frequency.cancelScheduledValues(ctx.currentTime);
         ch.filter.frequency.value = 22000;
         if (t.type === 'file') {
           if (!t.buffer) { pendingPlayId = t.id; return; }
           const src = ctx.createBufferSource();
           src.buffer = t.buffer;
-          src.connect(ch.eqLow);          // → eqMid → eqHigh → filter → gain → master
+          src.playbackRate.value = rate;   // beatmatch: >1 faster, <1 slower (pitch shifts too, like vinyl)
+          src.connect(ch.eqLow);           // → eqMid → eqHigh → filter → gain → master
           ch.src = src; ch.yt = null; ch.kind = 'file';
-          ch.dur = t.buffer.duration; ch.offset = 0; ch.startAt = ctx.currentTime;
+          ch.dur = t.buffer.duration / rate;   // effective real-time duration at this speed
+          ch.offset = 0; ch.startAt = ctx.currentTime;
           src.start(0);
           src.onended = () => { if (ch.item === t && ch.kind === 'file') onTrackEndedNatural(ch); };
         } else {
-          ch.kind = 'yt'; ch.src = null;
+          ch.kind = 'yt'; ch.src = null; ch.rate = 1;
           startYtOnChannel(ch, t, fadeInNow);
         }
         // fade in (file channels use the gain node; yt is handled via volume ramps)
@@ -852,8 +859,10 @@
           if (fadeInNow) { ch.gain.gain.setValueAtTime(1, now); }
           else { ch.gain.gain.setValueAtTime(0.0001, now); ch.gain.gain.linearRampToValueAtTime(1, now + xfadeDur); }
         }
+        const effBpm = (t.bpm && ch.rate) ? Math.round(t.bpm * ch.rate) : t.bpm;
         npTitle.textContent = t.name;
-        npMeta.textContent = (t.type === 'yt' ? 'youtube' : (t.bpm ? '~' + t.bpm + ' BPM' : '') + (t.dur ? ' · ' + fmt(t.dur) : ''));
+        npMeta.textContent = (t.type === 'yt' ? 'youtube'
+          : (effBpm ? '~' + effBpm + ' BPM' + (Math.abs(ch.rate - 1) > 0.005 ? ' (synced)' : '') : '') + (t.dur ? ' · ' + fmt(t.dur) : ''));
         setLive(true, t.type === 'yt' ? 'playing (yt)' : 'mixing');
       }
 
@@ -871,12 +880,24 @@
       }
 
       let crossfading = false;
+      // work out the incoming track's playback rate so its tempo matches the outgoing one
+      function beatmatchRate(from, next) {
+        if (!bmSync || from.kind !== 'file' || next.type !== 'file') return 1;
+        if (!from.item || !from.item.bpm || !next.bpm) return 1;
+        const targetBpm = from.item.bpm * (from.rate || 1);   // outgoing's current effective tempo
+        let r = targetBpm / next.bpm;
+        if (r > 1.35) r = targetBpm / (next.bpm * 2);          // treat next as double-time
+        else if (r < 0.74) r = targetBpm / (next.bpm / 2);     // treat next as half-time
+        return (r >= 0.85 && r <= 1.18) ? r : 1;               // only nudge within a musical range
+      }
+
       function beginCrossfade() {
         const next = queue[curIndex + 1];
         if (!next) return;
         crossfading = true;
         const from = active, to = idle;
-        startOnChannel(to, next, false);        // fades in over xfadeDur
+        const rate = beatmatchRate(from, next);
+        startOnChannel(to, next, false, rate);  // fades in over xfadeDur, tempo-synced
         // fade out + optional FX sweep on the outgoing track
         const now = ctx.currentTime;
         if (from.kind === 'file') {
@@ -1126,6 +1147,10 @@
 
       tgAuto.onclick = () => { autoMix = !autoMix; tgAuto.classList.toggle('on', autoMix); };
       tgFx.onclick = () => { fxSweep = !fxSweep; tgFx.classList.toggle('on', fxSweep); };
+      tgSync.onclick = () => {
+        bmSync = !bmSync; tgSync.classList.toggle('on', bmSync);
+        dzStatus(bmSync ? '♫ beatmatch ON — next mix will tempo-sync' : 'beatmatch off', false);
+      };
       xfade.oninput = () => { xfadeDur = +xfade.value; xfadeVal.textContent = xfadeDur + 's'; };
 
       // ---- 3-band EQ (applies live to both channels' file audio) ----
