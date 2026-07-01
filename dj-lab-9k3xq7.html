@@ -350,6 +350,12 @@
 
     .eq-reset:hover { color: var(--green); border-color: var(--green); }
 
+    .eq-ai {
+      color: var(--green);
+      font-size: 11px;
+      min-width: 120px;
+    }
+
     .eq-hint {
       margin-left: auto;
       color: #3a4a40;
@@ -534,6 +540,8 @@
 
     <div class="eqbar">
       <span class="eq-title mono">EQ</span>
+      <label class="toggle on" id="tg-autoeq"><span class="sw"></span> AI EQ</label>
+      <span class="eq-ai mono" id="eq-ai"></span>
       <div class="eq-band">
         <span class="eq-name">BASS</span>
         <input type="range" id="eq-low" min="-15" max="15" step="1" value="0" />
@@ -684,16 +692,21 @@
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 22000;
+        // AI auto-EQ (per-track tonal correction, separate from the user sliders)
+        const autoLow = ctx.createBiquadFilter(); autoLow.type = 'lowshelf'; autoLow.frequency.value = 120;
+        const autoMid = ctx.createBiquadFilter(); autoMid.type = 'peaking'; autoMid.frequency.value = 1200; autoMid.Q.value = 0.8;
+        const autoHigh = ctx.createBiquadFilter(); autoHigh.type = 'highshelf'; autoHigh.frequency.value = 3500;
         // user 3-band EQ: bass (low shelf) → mid (peaking) → treble (high shelf)
         const eqLow = ctx.createBiquadFilter(); eqLow.type = 'lowshelf'; eqLow.frequency.value = 120;
         const eqMid = ctx.createBiquadFilter(); eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
         const eqHigh = ctx.createBiquadFilter(); eqHigh.type = 'highshelf'; eqHigh.frequency.value = 3200;
         // dedicated bass-swap shelf for transitions (separate from user EQ)
         const swapLow = ctx.createBiquadFilter(); swapLow.type = 'lowshelf'; swapLow.frequency.value = 200; swapLow.gain.value = 0;
-        // chain: source → eqLow → eqMid → eqHigh → swapLow → filter → gain → trim → master
+        // chain: source → autoEQ → userEQ → swapLow → filter → gain → trim → master
+        autoLow.connect(autoMid); autoMid.connect(autoHigh); autoHigh.connect(eqLow);
         eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(swapLow); swapLow.connect(filter);
         filter.connect(gain); gain.connect(trim); trim.connect(master);
-        return { gain, trim, filter, eqLow, eqMid, eqHigh, swapLow, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, rate: 1, raf: 0 };
+        return { gain, trim, filter, eqLow, eqMid, eqHigh, autoLow, autoMid, autoHigh, swapLow, src: null, yt: null, kind: null, item: null, startAt: 0, offset: 0, dur: 0, rate: 1, raf: 0 };
       }
       const chA = makeChannel();
       const chB = makeChannel();
@@ -709,7 +722,7 @@
       const tgAuto = el('tg-automix'), tgFx = el('tg-fx'), tgSync = el('tg-sync');
       const xfade = el('xfade'), xfadeVal = el('xfade-val');
 
-      let autoMix = true, fxSweep = true, xfadeDur = 8, bmSync = false;
+      let autoMix = true, fxSweep = true, xfadeDur = 8, bmSync = false, autoEqOn = true;
 
       // ---- helpers ----
       const fmt = s => { s = Math.max(0, s | 0); return (s / 60 | 0) + ':' + ('0' + (s % 60)).slice(-2); };
@@ -793,6 +806,7 @@
           const loud = analyzeLoudness(buf);    // normalize loudness + capture energy
           t.gainTrim = loud.trim;
           t.energy = loud.energy;
+          t.autoEq = autoEqFor(buf);            // AI tonal-correction EQ (dB per band)
           renderQueue();
           // if the user pressed play on this track before it finished decoding, start it now
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
@@ -865,6 +879,7 @@
         ch.swapLow.gain.cancelScheduledValues(ctx.currentTime);
         ch.swapLow.gain.value = 0;                              // full bass by default
         ch.trim.gain.setValueAtTime(t.gainTrim || 1, ctx.currentTime);   // loudness match
+        applyAutoEq(ch, t);                                    // AI tonal correction
         const startTime = when && when > ctx.currentTime ? when : ctx.currentTime;
         const off = bufOffset || 0;
         if (t.type === 'file') {
@@ -872,7 +887,7 @@
           const src = ctx.createBufferSource();
           src.buffer = t.buffer;
           src.playbackRate.value = rate;   // beatmatch: >1 faster, <1 slower (pitch shifts too, like vinyl)
-          src.connect(ch.eqLow);           // → eqMid → eqHigh → filter → gain → master
+          src.connect(ch.autoLow);         // → autoEQ → userEQ → swap → filter → gain → trim → master
           ch.src = src; ch.yt = null; ch.kind = 'file';
           ch.offset = off; ch.startAt = startTime;
           ch.dur = (t.buffer.duration - off) / rate;   // effective real-time duration at this speed
@@ -1142,6 +1157,36 @@
         } catch (e) { return { trim: 1, energy: 0.12 }; }
       }
 
+      // Analyze low/mid/high energy and derive a gentle corrective EQ (dB per band),
+      // so a boomy track gets its bass eased and a thin/harsh track gets balanced.
+      function autoEqFor(buffer) {
+        try {
+          const sr = buffer.sampleRate, d = buffer.getChannelData(0);
+          const decim = Math.max(1, Math.floor(d.length / 200000));
+          const fs = sr / decim;
+          const aLow = Math.exp(-2 * Math.PI * 250 / fs);   // one-pole LP ~250 Hz
+          const aMid = Math.exp(-2 * Math.PI * 2200 / fs);  // one-pole LP ~2.2 kHz
+          let lp1 = 0, lp2 = 0, sL = 0, sM = 0, sH = 0, n = 0;
+          for (let i = 0; i < d.length; i += decim) {
+            const x = d[i];
+            lp1 = aLow * lp1 + (1 - aLow) * x;
+            lp2 = aMid * lp2 + (1 - aMid) * x;
+            const low = lp1, mid = lp2 - lp1, high = x - lp2;
+            sL += low * low; sM += mid * mid; sH += high * high; n++;
+          }
+          const L = Math.sqrt(sL / n), M = Math.sqrt(sM / n), H = Math.sqrt(sH / n);
+          const tot = L + M + H || 1;
+          const sLow = L / tot, sMid = M / tot, sHigh = H / tot;
+          const refL = 0.56, refM = 0.30, refH = 0.14;       // target tonal balance
+          const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+          return {
+            low: Math.round(clamp(5 * Math.log10(refL / sLow), -6, 6)),
+            mid: Math.round(clamp(4 * Math.log10(refM / sMid), -5, 5)),
+            high: Math.round(clamp(5 * Math.log10(refH / sHigh), -6, 6))
+          };
+        } catch (e) { return { low: 0, mid: 0, high: 0 }; }
+      }
+
       // equal-power crossfade curve (no volume dip in the middle)
       function eqPowerCurve(rising) {
         const n = 48, c = new Float32Array(n);
@@ -1355,6 +1400,28 @@
         eqLowS.value = eqMidS.value = eqHighS.value = 0;
         eqLowV.textContent = eqMidV.textContent = eqHighV.textContent = '0';
         setEQ('low', 0); setEQ('mid', 0); setEQ('high', 0);
+      };
+
+      // ---- AI auto-EQ (per-track tonal correction) ----
+      const eqAiEl = el('eq-ai'), tgAutoEq = el('tg-autoeq');
+      function applyAutoEq(ch, t) {
+        const on = autoEqOn && t && t.autoEq;
+        const eq = on ? t.autoEq : { low: 0, mid: 0, high: 0 };
+        const now = ctx.currentTime;
+        ch.autoLow.gain.setTargetAtTime(eq.low, now, 0.04);
+        ch.autoMid.gain.setTargetAtTime(eq.mid, now, 0.04);
+        ch.autoHigh.gain.setTargetAtTime(eq.high, now, 0.04);
+        if (ch === active) showAutoEq(on ? eq : null);
+      }
+      function showAutoEq(eq) {
+        eqAiEl.textContent = eq ? ('▸ B' + fmtDb(eq.low) + ' M' + fmtDb(eq.mid) + ' T' + fmtDb(eq.high)) : '';
+      }
+      tgAutoEq.onclick = () => {
+        autoEqOn = !autoEqOn;
+        tgAutoEq.classList.toggle('on', autoEqOn);
+        if (active.item) applyAutoEq(active, active.item);   // re-apply to the playing track
+        if (!autoEqOn) showAutoEq(null);
+        dzStatus(autoEqOn ? 'AI EQ on — auto tonal balance per track' : 'AI EQ off', false);
       };
 
       // keyboard: space = play/pause, → skip
