@@ -1135,6 +1135,79 @@
       letter-spacing: .5px;
     }
 
+    /* case-study cards + modal */
+    .case-card { cursor: pointer; }
+    .case-cta {
+      margin-top: 18px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: #3a8f4f;
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: all .25s ease;
+    }
+    .case-card:hover .case-cta,
+    .case-card:focus-visible .case-cta { opacity: 1; transform: translateX(0); color: var(--green); }
+
+    .case-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 4vh 3vw;
+    }
+    .case-modal.open { display: flex; }
+    .case-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(4px); }
+    .case-panel {
+      position: relative;
+      width: min(860px, 96vw);
+      max-height: 92vh;
+      background: #07100a;
+      border: 1px solid #1f3a29;
+      border-radius: 12px;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 60px rgba(var(--green-rgb), 0.08);
+      overflow: hidden;
+      animation: caseIn .28s cubic-bezier(.16, 1, .3, 1);
+    }
+    @keyframes caseIn { from { opacity: 0; transform: translateY(20px) scale(.98); } }
+    .case-close {
+      position: absolute; top: 14px; right: 14px; z-index: 2;
+      width: 38px; height: 38px; border-radius: 8px;
+      background: rgba(6, 9, 8, 0.8); border: 1px solid #1f3a29; color: var(--green);
+      font-size: 16px; cursor: pointer;
+    }
+    .case-close:hover { border-color: var(--green); box-shadow: 0 0 14px rgba(var(--green-rgb), 0.25); }
+    .case-scroll { max-height: 92vh; overflow-y: auto; padding: 40px clamp(22px, 5vw, 54px) 54px; }
+    .case-scroll::-webkit-scrollbar { width: 8px; }
+    .case-scroll::-webkit-scrollbar-thumb { background: #1f3a29; border-radius: 4px; }
+
+    .case-head { border-bottom: 1px solid #16271c; padding-bottom: 26px; margin-bottom: 8px; }
+    .cm-eyebrow { color: var(--green); letter-spacing: 3px; font-size: 12px; }
+    #cm-title { font-size: clamp(28px, 5vw, 46px); font-weight: 700; margin: 10px 0 8px; line-height: 1.05; }
+    .cm-sub { color: #6f7d74; font-size: 13px; letter-spacing: .5px; }
+    .cm-tags { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .cm-live { margin-top: 22px; font-family: 'Share Tech Mono', monospace; font-size: 13px; padding: 12px 22px; }
+
+    .case-body h4 {
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--green);
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin: 34px 0 12px;
+    }
+    .case-body p { color: #b9c4bd; font-weight: 300; font-size: 17px; line-height: 1.7; margin-bottom: 14px; }
+    .case-body b { color: #eafff0; font-weight: 500; }
+    .case-body ul { list-style: none; margin: 6px 0 14px; }
+    .case-body li { color: #9aa39c; font-weight: 300; font-size: 16px; line-height: 1.6; padding: 6px 0 6px 22px; position: relative; }
+    .case-body li::before { content: '▹'; position: absolute; left: 0; color: var(--green); }
+    .case-note { margin-top: 30px; padding: 14px 16px; border: 1px dashed #2c4b38; border-radius: 8px; color: #6f7d74; font-size: 13px; }
+    .case-note b { color: var(--yellow); }
+
+    body.modal-open { overflow: hidden; }
+
     /* skills */
     .skills-wrap {
       margin-top: 48px;
@@ -1621,8 +1694,7 @@
         <div class="sec-label">// selected work</div>
         <h2 class="sec-title" id="projects-title"><span class="num">02</span>Projects</h2>
         <div class="proj-grid">
-          <a class="card link-card" href="https://pars-restaurant-production-c4ff.up.railway.app" target="_blank"
-            rel="noopener">
+          <article class="card case-card" data-case="pars" role="button" tabindex="0" aria-label="Open case study: Pars Restaurant System">
             <div class="thumb thumb-pars" aria-hidden="true"><span class="thumb-bar"></span><span class="thumb-mono">PRS</span></div>
             <div class="idx">PROJECT_01 <span class="live-link">LIVE ↗</span></div>
             <h3>Pars Restaurant System</h3>
@@ -1630,8 +1702,9 @@
               deployed to production on Railway.</p>
             <div class="tags"><span class="tag">Node.js</span><span class="tag">React</span><span
                 class="tag">MongoDB</span><span class="tag">LSTM</span><span class="tag">Railway</span></div>
-          </a>
-          <div class="card">
+            <div class="case-cta mono">READ CASE STUDY →</div>
+          </article>
+          <article class="card case-card" data-case="therapylake" role="button" tabindex="0" aria-label="Open case study: TherapyLake Timezone Debug">
             <div class="thumb thumb-tl" aria-hidden="true"><span class="thumb-mono">⏱ TZ</span></div>
             <div class="idx">PROJECT_02</div>
             <h3>TherapyLake Timezone Debug</h3>
@@ -1639,8 +1712,9 @@
               correct slots worldwide.</p>
             <div class="tags"><span class="tag">Moment.js</span><span class="tag">Node.js</span><span
                 class="tag">Debugging</span></div>
-          </div>
-          <div class="card">
+            <div class="case-cta mono">READ CASE STUDY →</div>
+          </article>
+          <article class="card case-card" data-case="clinical" role="button" tabindex="0" aria-label="Open case study: Clinical Data Pipeline">
             <div class="thumb thumb-clin" aria-hidden="true"><span class="thumb-mono">{ }</span></div>
             <div class="idx">PROJECT_03</div>
             <h3>Clinical Data Pipeline</h3>
@@ -1648,8 +1722,9 @@
               output.</p>
             <div class="tags"><span class="tag">Python</span><span class="tag">CSV</span><span class="tag">ETL</span>
             </div>
-          </div>
-          <div class="card">
+            <div class="case-cta mono">READ CASE STUDY →</div>
+          </article>
+          <article class="card case-card" data-case="v2ray" role="button" tabindex="0" aria-label="Open case study: V2Ray VLESS Config">
             <div class="thumb thumb-v2" aria-hidden="true"><span class="thumb-mono">🔒 TLS</span></div>
             <div class="idx">PROJECT_04</div>
             <h3>V2Ray VLESS Config</h3>
@@ -1657,19 +1732,20 @@
               certificate handling.</p>
             <div class="tags"><span class="tag">Networking</span><span class="tag">TLS</span><span
                 class="tag">V2Ray</span></div>
-          </div>
-          <a class="card link-card" href="https://europeanuniversity.am" target="_blank" rel="noopener">
+            <div class="case-cta mono">READ CASE STUDY →</div>
+          </article>
+          <article class="card case-card" data-case="eua" role="button" tabindex="0" aria-label="Open case study: European University of Armenia">
             <div class="thumb thumb-eua" aria-hidden="true"><span class="thumb-bar"></span><span class="thumb-mono">EUA</span></div>
             <div class="idx">PROJECT_05 <span class="live-link">LIVE ↗</span></div>
             <h3>European University of Armenia</h3>
             <p>Developed and maintain the official site for a higher-education institution built in partnership with
               French &amp; European universities. Multilingual (EN/FA) WordPress + Elementor build serving an
-              international audience across Armenia, Iran and Europe — design updates, plugin management, SEO and
-              ongoing technical support with direct client contact.</p>
+              international audience across Armenia, Iran and Europe.</p>
             <div class="tags"><span class="tag">WordPress</span><span class="tag">Elementor</span><span
                 class="tag">TranslatePress</span><span class="tag">Search Console</span><span class="tag">SEO</span>
             </div>
-          </a>
+            <div class="case-cta mono">READ CASE STUDY →</div>
+          </article>
         </div>
       </div>
     </section>
@@ -1829,6 +1905,24 @@
       </div>
     </footer>
   </main>
+
+  <!-- case-study overlay -->
+  <div id="case-modal" class="case-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="cm-title">
+    <div class="case-backdrop" data-close></div>
+    <div class="case-panel" role="document">
+      <button class="case-close" data-close aria-label="Close case study">✕</button>
+      <div class="case-scroll">
+        <div class="case-head">
+          <div class="cm-eyebrow mono" id="cm-eyebrow">CASE STUDY</div>
+          <h2 id="cm-title">—</h2>
+          <div class="cm-sub mono" id="cm-sub"></div>
+          <div class="cm-tags" id="cm-tags"></div>
+          <a class="btn primary cm-live" id="cm-live" target="_blank" rel="noopener" hidden>Visit Live Site ↗</a>
+        </div>
+        <div class="case-body" id="cm-body"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="hint">SCROLL TO ENTER<span class="arrow">▼</span></div>
 
@@ -2847,6 +2941,205 @@
       s.src = '//gc.zgo.at/count.js';
       s.setAttribute('data-goatcounter', 'https://' + GC_CODE + '.goatcounter.com/count');
       document.head.appendChild(s);
+    })();
+  </script>
+
+  <!-- ===================== CASE STUDIES ===================== -->
+  <script>
+    (function () {
+      'use strict';
+      const CASES = {
+        pars: {
+          title: 'Pars Restaurant System',
+          sub: 'Full-Stack Developer · Jan 2026 – present · Node · React · MongoDB · Python/LSTM',
+          tags: ['Node.js', 'Express', 'React', 'MongoDB', 'LSTM', 'Railway'],
+          live: 'https://pars-restaurant-production-c4ff.up.railway.app',
+          body: `
+            <h4>Context</h4>
+            <p>Restaurants live and die by two things: handling live orders correctly, and preparing the
+            <b>right amount</b> of food. Over-prep wastes money; under-prep loses sales. <b>Pars</b> is an
+            all-in-one platform that runs day-to-day operations and layers <b>demand forecasting</b> on top,
+            so the kitchen can plan ahead instead of guessing.</p>
+
+            <h4>My approach</h4>
+            <p>I built it end-to-end as a full-stack application and took it all the way to production:</p>
+            <ul>
+              <li>A <b>Node.js / Express</b> API backed by <b>MongoDB</b> for menu, orders and inventory.</li>
+              <li>A <b>React</b> front-end for staff to manage orders and see the current state at a glance.</li>
+              <li>Real-time order flow so the kitchen and front-of-house stay in sync.</li>
+              <li>An <b>LSTM</b> model trained on historical order data to <b>forecast demand</b>, feeding the
+              forecasts back into the app.</li>
+              <li>Deployed and running live on <b>Railway</b>.</li>
+            </ul>
+
+            <h4>Technical highlights</h4>
+            <ul>
+              <li>Designing a clean data model for menu → orders → inventory that stays consistent under live use.</li>
+              <li>Bridging a <b>Python ML</b> model with a JavaScript backend — getting forecasts into the product,
+              not just a notebook.</li>
+              <li>Owning the full lifecycle: schema, API, UI, model, deployment.</li>
+            </ul>
+
+            <h4>Outcome</h4>
+            <p>Shipped to production and <b>running live</b>. It gives restaurant staff a single place to manage
+            orders and a forward look at demand — turning historical data into something operationally useful.</p>
+
+            <h4>What I learned</h4>
+            <p>The hard part of ML in a product isn't the model — it's <b>plumbing it into a real app</b> and
+            deploying the whole thing reliably. This project pushed me across the entire stack, from database
+            design to shipping on Railway.</p>`
+        },
+        therapylake: {
+          title: 'TherapyLake — Timezone Debug',
+          sub: 'Freelance Developer · Apr – Jun 2026 · Node · Moment.js',
+          tags: ['Moment.js', 'Node.js', 'Timezones', 'Debugging'],
+          live: null,
+          body: `
+            <h4>The problem</h4>
+            <p>A therapy-booking app was showing <b>wrong appointment slots across timezones</b>. A therapist in
+            one zone and a client in another would see mismatched times — a recipe for missed sessions and
+            double-bookings. Timezone bugs are notoriously slippery: everything looks fine until someone in a
+            different offset (or on the wrong side of a DST switch) tries to book.</p>
+
+            <h4>My approach</h4>
+            <ul>
+              <li>Traced exactly where times were being <b>stored and converted</b> through the booking flow.</li>
+              <li>Found the mismatch between local time and UTC — the classic point where these bugs hide.</li>
+              <li>Standardized on <b>storing UTC</b> and converting only at the edges (display), using Moment.js.</li>
+              <li>Checked the awkward cases: <b>DST boundaries</b> and large offset differences.</li>
+            </ul>
+
+            <h4>Outcome</h4>
+            <p>Booking slots became <b>correct worldwide</b>, regardless of where the therapist or client sits.
+            The fix removed a whole class of scheduling errors.</p>
+
+            <h4>What I learned</h4>
+            <p>Timezones are one of those things that look trivial and aren't. The durable lesson: <b>store UTC,
+            convert at the edges, and always test the DST boundary</b> — the bug is almost never where the symptom
+            appears.</p>`
+        },
+        clinical: {
+          title: 'Clinical Data Pipeline',
+          sub: 'Data Engineering · Python',
+          tags: ['Python', 'CSV', 'ETL', 'Data cleaning'],
+          live: null,
+          body: `
+            <h4>Context</h4>
+            <p>Clinical data arrived as <b>messy CSV files</b> — inconsistent formats, missing values, mixed
+            types. Before anyone could analyze it, it needed to be turned into <b>clean, structured,
+            analysis-ready</b> output, reliably and repeatably.</p>
+
+            <h4>My approach</h4>
+            <ul>
+              <li>Built a <b>Python pipeline</b> to ingest raw CSVs automatically.</li>
+              <li><b>Validated and cleaned</b> the data — handling missing values, fixing types, removing
+              duplicates and bad rows.</li>
+              <li><b>Transformed</b> it into a consistent, structured shape ready for analysis.</li>
+              <li>Kept it <b>reproducible</b> so the same messy input always yields the same clean output.</li>
+            </ul>
+
+            <h4>Outcome</h4>
+            <p>Raw, unreliable spreadsheets became <b>trustworthy datasets</b> that downstream analysis could
+            actually depend on.</p>
+
+            <h4>What I learned</h4>
+            <p>Real-world data is never clean. Most of the value in a data project is the <b>unglamorous
+            validation and cleaning</b> — and doing it in a repeatable pipeline instead of one-off scripts is
+            what makes it reliable.</p>`
+        },
+        v2ray: {
+          title: 'V2Ray VLESS Configuration',
+          sub: 'Networking · Security',
+          tags: ['Networking', 'TLS', 'V2Ray', 'VLESS'],
+          live: null,
+          body: `
+            <h4>Context</h4>
+            <p>The goal was a <b>secure, low-latency tunnel</b> using the <b>VLESS</b> protocol over <b>TLS</b> —
+            a setup that has to be both fast and correctly secured, where small configuration mistakes break
+            connectivity or leak the connection.</p>
+
+            <h4>My approach</h4>
+            <ul>
+              <li>Configured <b>V2Ray</b> with the VLESS protocol running <b>over TLS</b>.</li>
+              <li>Handled <b>certificates</b> properly so the transport is genuinely encrypted and trusted.</li>
+              <li>Tuned the setup for <b>low latency and reliability</b>.</li>
+            </ul>
+
+            <h4>Outcome</h4>
+            <p>A stable, secure tunnel with proper TLS termination — fast in daily use and correctly hardened.</p>
+
+            <h4>What I learned</h4>
+            <p>Hands-on networking and <b>TLS internals</b>: how certificates, the handshake and transport
+            security actually fit together — knowledge that carries straight back into securing web apps.</p>`
+        },
+        eua: {
+          title: 'European University of Armenia',
+          sub: 'WordPress Developer & Technical Support · Mar 2025 – present',
+          tags: ['WordPress', 'Elementor', 'TranslatePress', 'SEO', 'Search Console'],
+          live: 'https://europeanuniversity.am',
+          body: `
+            <h4>Context</h4>
+            <p>The official website for a higher-education institution founded in partnership with French and
+            European universities. Its audience is genuinely <b>international</b> — students and staff across
+            <b>Armenia, Iran and Europe</b> — so the site has to speak more than one language and stay current
+            as the institution grows.</p>
+
+            <h4>What I do</h4>
+            <ul>
+              <li>Built and maintain the site on <b>WordPress + Elementor</b>.</li>
+              <li>Set up <b>multilingual English / Persian</b> support with <b>TranslatePress</b> (including
+              right-to-left Persian).</li>
+              <li>Implemented <b>SEO fundamentals</b> and <b>Google site verification / Search Console</b>.</li>
+              <li>Ongoing: design updates, content changes, plugin management and <b>direct client support</b>
+              as the site evolves.</li>
+            </ul>
+
+            <h4>Outcome</h4>
+            <p>A live, official institutional site serving an international academic audience — and an <b>ongoing,
+            client-facing role</b> keeping it healthy and current.</p>
+
+            <h4>What I learned</h4>
+            <p>Beyond the build: <b>working directly with a real client</b>, communicating clearly, and owning a
+            production site's upkeep over time — including the realities of multilingual, RTL and SEO work.</p>`
+        }
+      };
+
+      const modal = document.getElementById('case-modal');
+      const elTitle = document.getElementById('cm-title');
+      const elSub = document.getElementById('cm-sub');
+      const elTags = document.getElementById('cm-tags');
+      const elBody = document.getElementById('cm-body');
+      const elLive = document.getElementById('cm-live');
+      let lastFocus = null;
+
+      function openCase(key) {
+        const c = CASES[key];
+        if (!c) return;
+        lastFocus = document.activeElement;
+        elTitle.textContent = c.title;
+        elSub.textContent = c.sub;
+        elTags.innerHTML = c.tags.map(t => '<span class="tag">' + t + '</span>').join('');
+        elBody.innerHTML = c.body;
+        if (c.live) { elLive.href = c.live; elLive.hidden = false; } else { elLive.hidden = true; }
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        modal.querySelector('.case-scroll').scrollTop = 0;
+        document.querySelector('.case-close').focus();
+      }
+      function closeCase() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        if (lastFocus) lastFocus.focus();
+      }
+
+      document.querySelectorAll('.case-card').forEach(card => {
+        card.addEventListener('click', () => openCase(card.dataset.case));
+        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCase(card.dataset.case); } });
+      });
+      modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', closeCase));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) closeCase(); });
     })();
   </script>
 </body>
