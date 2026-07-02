@@ -824,6 +824,7 @@
           t.gainTrim = loud.trim; t.energy = loud.energy;
           t.autoEq = autoEqFor(buf);
           t.envWin = 1; t.env = energyEnvelope(buf, t.envWin);   // energy over time → smart mix points
+          computePhrase(t);                                      // 16-bar phrase grid → mix on the "1"
           // if this track is already on a deck, apply the freshly-computed trim + auto-EQ live
           [active, idle].forEach(ch => {
             if (ch.item === t) {
@@ -957,7 +958,12 @@
         const endReal = ch.startAt + ch.dur - xfadeDur;      // fallback: near the end
         let out = endReal;
         if (smartMix && ch.item.env && ch.item.env.length > 8) {
-          const tt = findMixOut(ch.item.env, ch.item.envWin, ch.item.buffer.duration, xfadeDur * ch.rate);
+          let tt = findMixOut(ch.item.env, ch.item.envWin, ch.item.buffer.duration, xfadeDur * ch.rate);
+          // snap the mix-out to the nearest 16-bar phrase boundary so the mix starts on the "1"
+          if (ch.item.phrasePeriod) {
+            const pp = ch.item.phrasePeriod, po = ch.item.phraseOffset || 0;
+            tt = po + Math.round((tt - po) / pp) * pp;
+          }
           let smart = ch.startAt + (tt - ch.offset) / ch.rate;
           const minReal = ch.startAt + ch.dur * 0.40;
           const maxReal = ch.startAt + ch.dur - 2;
@@ -978,15 +984,13 @@
         return (r >= 0.85 && r <= 1.18) ? r : 1;               // only nudge within a musical range
       }
 
-      // real-time of the outgoing track's next beat at or after time `after`
-      function nextOutgoingBeat(from, after) {
-        if (from.kind !== 'file' || !from.item || !from.item.bpm) return null;
-        const bpm = from.item.bpm, r = from.rate || 1, boff = from.item.beatOffset || 0;
-        const PbT = 60 / bpm;                                    // beat period in track-time
-        const afterT = (after - from.startAt) * r + (from.offset || 0);  // track pos at `after`
-        const k = Math.ceil((afterT - boff) / PbT - 1e-6);
-        const beatT = boff + k * PbT;
-        return from.startAt + (beatT - (from.offset || 0)) / r;  // back to real time
+      // real-time of the outgoing track's next grid point (beat or phrase) at/after `after`
+      function nextGridPoint(from, after, periodTrack, offsetTrack) {
+        const r = from.rate || 1;
+        const afterT = (after - from.startAt) * r + (from.offset || 0);
+        const k = Math.ceil((afterT - offsetTrack) / periodTrack - 1e-6);
+        const gt = offsetTrack + k * periodTrack;
+        return from.startAt + (gt - (from.offset || 0)) / r;
       }
 
       function beginCrossfade() {
@@ -996,17 +1000,23 @@
         const from = active, to = idle;
         const rate = beatmatchRate(from, next);
 
-        // beat-align: schedule the incoming track to start on the outgoing's next beat,
-        // itself starting at ITS first beat — so the kicks land together.
+        // align the incoming start to the outgoing's grid, and start the incoming at ITS grid
+        // origin — prefer the 16-bar PHRASE boundary, fall back to the nearest beat.
         let when = ctx.currentTime + 0.06;
         let off = 0;
-        let aligned = false;
+        let aligned = false, phrase = false;
         if (bmSync && from.kind === 'file' && next.type === 'file' && from.item && from.item.bpm && next.bpm) {
-          const A = nextOutgoingBeat(from, when);
-          if (A && A - ctx.currentTime < 2.5) { when = A; off = next.beatOffset || 0; aligned = true; }
+          if (from.item.phrasePeriod && next.phrasePeriod) {
+            const A = nextGridPoint(from, when, from.item.phrasePeriod, from.item.phraseOffset);
+            if (A && A - ctx.currentTime < from.item.phrasePeriod + 0.2) { when = A; off = next.phraseOffset || 0; aligned = true; phrase = true; }
+          }
+          if (!aligned) {
+            const A = nextGridPoint(from, when, 60 / from.item.bpm, from.item.beatOffset || 0);
+            if (A && A - ctx.currentTime < 2.5) { when = A; off = next.beatOffset || 0; aligned = true; }
+          }
         }
 
-        startOnChannel(to, next, false, rate, when, off);  // scheduled, tempo-synced, beat-aligned
+        startOnChannel(to, next, false, rate, when, off);  // scheduled, tempo-synced, phrase/beat-aligned
 
         // fade out (equal-power) + bass-swap + optional FX sweep, timed to `when`
         if (from.kind === 'file') {
@@ -1031,7 +1041,7 @@
           ytVolRamp(from.yt, 100, 0, xfadeDur * 1000);
         }
 
-        dzStatus('♫ pro mix — bass-swap' + (aligned ? ' · beat-aligned' : '') + (Math.abs(rate - 1) > 0.005 ? ' · tempo-synced' : ''), false);
+        dzStatus('♫ pro mix — bass-swap' + (phrase ? ' · phrase-aligned' : aligned ? ' · beat-aligned' : '') + (Math.abs(rate - 1) > 0.005 ? ' · tempo-synced' : ''), false);
 
         // swap roles
         active = to; idle = from;
@@ -1250,6 +1260,23 @@
         }
         return env;
       }
+      // detect the 16-bar phrase grid: which beat starts each phrase (big energy changes
+      // — drops/breakdowns — tend to fall on phrase boundaries).
+      function computePhrase(t) {
+        t.phrasePeriod = 0;
+        if (!t.bpm || !t.env || t.env.length < 16) return;
+        const beatP = 60 / t.bpm, phraseBeats = 16, win = t.envWin || 1, dur = t.buffer.duration;
+        const dE = sec => { const i = Math.round(sec / win); return (i < 1 || i >= t.env.length) ? 0 : Math.abs(t.env[i] - t.env[i - 1]); };
+        let bestP = 0, bestScore = -1;
+        for (let p = 0; p < phraseBeats; p++) {
+          let score = 0;
+          for (let sec = t.beatOffset + p * beatP; sec < dur; sec += phraseBeats * beatP) score += dE(sec);
+          if (score > bestScore) { bestScore = score; bestP = p; }
+        }
+        t.phrasePeriod = phraseBeats * beatP;
+        t.phraseOffset = t.beatOffset + bestP * beatP;   // first phrase boundary (track-time s)
+      }
+
       // track-time (s) where the AI should start mixing out: a dip/outro in the back half,
       // else just before the end. Keeps the mix landing on the track's quieter section.
       function findMixOut(env, winSec, dur, leadSec) {
