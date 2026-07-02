@@ -467,6 +467,7 @@
     .qitem .qmain { flex: 1; min-width: 0; }
     .qitem .qname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qitem .qsub { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #6f7d74; margin-top: 2px; }
+    .qitem .qkey { color: var(--cyan); }
     .qitem .qtype { font-family: 'Share Tech Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 3px; border: 1px solid #1f4a2d; color: var(--green); }
     .qitem .qtype.yt { color: var(--pink); border-color: #5a2f43; }
     .qitem .qbtn { background: none; border: none; color: #4f6f5a; cursor: pointer; font-size: 15px; padding: 4px; }
@@ -684,6 +685,24 @@
       let playing = false;
       let uid = 1;
 
+      // precise offline analysis (from analyze_set.py) keyed by filename — used when present
+      let setAnalysis = {};
+      fetch('set-analysis.json', { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : {})
+        .then(j => { setAnalysis = j || {}; })
+        .catch(() => {});
+      function applyPrecise(t) {
+        const a = t.file && setAnalysis[t.file.name];
+        if (!a) return false;
+        t.bpm = a.bpm; t.beatOffset = a.beatOffset;
+        t.phraseOffset = a.phraseOffset;
+        t.phrasePeriod = (a.phraseBeats || 16) * 60 / a.bpm;
+        t.key = a.key; t.camelot = a.camelot;
+        if (a.energy != null) t.energy = a.energy;
+        t.hasPy = true;
+        return true;
+      }
+
       // two channels for crossfading (each can hold a file source OR a yt player)
       function makeChannel() {
         const gain = ctx.createGain();       // crossfade shape (0..1)
@@ -745,7 +764,7 @@
             '<span class="qnum">' + (i === curIndex ? '▶' : (i + 1)) + '</span>' +
             '<span class="qtype ' + (t.type === 'yt' ? 'yt' : '') + '">' + (t.type === 'yt' ? 'YT' : 'FILE') + '</span>' +
             '<div class="qmain"><div class="qname">' + escapeHtml(t.name) + '</div>' +
-            '<div class="qsub">' + (t.type === 'yt' ? 'youtube · crossfade' : (t.bpm ? ('~' + t.bpm + ' BPM · ') : '') + (t.dur ? fmt(t.dur) : 'decoding…')) + '</div></div>' +
+            '<div class="qsub">' + (t.type === 'yt' ? 'youtube · crossfade' : (t.bpm ? ('~' + Math.round(t.bpm) + ' BPM · ') : '') + (t.dur ? fmt(t.dur) : 'decoding…') + (t.camelot ? ' · <span class="qkey">' + t.camelot + ' ' + t.key + '</span>' : '')) + '</div></div>' +
             '<button class="qbtn play" title="play this" data-i="' + i + '">▶</button>' +
             '<button class="qbtn del" title="remove" data-i="' + i + '">✕</button>';
           qList.appendChild(li);
@@ -802,10 +821,11 @@
           const buf = await ctx.decodeAudioData(arr.slice(0));
           t.buffer = buf;
           t.dur = buf.duration;
+          applyPrecise(t);                    // use exact BPM/beat/phrase/key if analyzed offline
           renderQueue();
           // play immediately if requested — don't wait for the heavy analysis
           if (pendingPlayId === t.id) { pendingPlayId = null; startOnChannel(active, t, true); }
-          scheduleAnalysis(t, buf);           // BPM / loudness / auto-EQ off the critical path
+          scheduleAnalysis(t, buf);           // env/auto-EQ/loudness (+ BPM if no precise data)
         } catch (e) {
           t.name += '  (decode failed)';
           renderQueue();
@@ -817,14 +837,17 @@
       let analysisQueue = [], analysisBusy = false;
       function scheduleAnalysis(t, buf) {
         analysisQueue.push(() => {
-          const est = estimateBeat(buf);
-          t.bpm = est ? est.bpm : null;
-          t.beatOffset = est ? est.offset : 0;
+          if (!t.hasPy) {                       // only estimate if no precise offline data
+            const est = estimateBeat(buf);
+            t.bpm = est ? est.bpm : null;
+            t.beatOffset = est ? est.offset : 0;
+          }
           const loud = analyzeLoudness(buf);
-          t.gainTrim = loud.trim; t.energy = loud.energy;
+          t.gainTrim = loud.trim;
+          if (!t.hasPy) t.energy = loud.energy;
           t.autoEq = autoEqFor(buf);
           t.envWin = 1; t.env = energyEnvelope(buf, t.envWin);   // energy over time → smart mix points
-          computePhrase(t);                                      // 16-bar phrase grid → mix on the "1"
+          if (!t.hasPy) computePhrase(t);                        // else use the precise phrase grid
           // if this track is already on a deck, apply the freshly-computed trim + auto-EQ live
           [active, idle].forEach(ch => {
             if (ch.item === t) {
@@ -1435,11 +1458,22 @@
       };
 
       /* ---------- AI SET ORDERING ---------- */
-      // transition cost between two tracks: small BPM jump + small energy jump = smooth
+      // harmonic distance on the Camelot wheel (0 = same/compatible, higher = clashing)
+      function camelotDist(a, b) {
+        if (!a || !b || a === '?' || b === '?') return 0.5;   // unknown → neutral
+        const na = parseInt(a), la = a.slice(-1), nb = parseInt(b), lb = b.slice(-1);
+        if (a === b) return 0;
+        let d = Math.abs(na - nb); d = Math.min(d, 12 - d);   // wheel wraps 12→1
+        if (la === lb && d === 1) return 0.4;                 // ±1 same letter — smooth
+        if (na === nb && la !== lb) return 0.4;               // relative major/minor
+        if (la === lb && d === 0) return 0;
+        return 1 + d * 0.4;                                   // further apart = costlier
+      }
+      // transition cost: small BPM jump + small energy jump + harmonic compatibility
       function transitionCost(a, b) {
         const bpmA = a.bpm || 120, bpmB = b.bpm || 120;
         const eA = a.energy != null ? a.energy : 0.12, eB = b.energy != null ? b.energy : 0.12;
-        return Math.abs(bpmA - bpmB) / 8 + Math.abs(eA - eB) * 12;
+        return Math.abs(bpmA - bpmB) / 8 + Math.abs(eA - eB) * 12 + camelotDist(a.camelot, b.camelot) * 2.5;
       }
       // nearest-neighbour path + 2-opt; anchored to a fixed first track if one is playing
       function orderPool(pool, anchor) {
@@ -1482,7 +1516,8 @@
         const anchor = front.length ? front[front.length - 1] : null;
         queue = front.concat(orderPool(pool, anchor));
         renderQueue();
-        dzStatus('✨ set arranged by BPM + energy' + (undecoded ? ' (' + undecoded + ' still analyzing)' : ''), false);
+        const anyKey = pool.some(t => t.camelot);
+        dzStatus('✨ set arranged by BPM + energy' + (anyKey ? ' + key (harmonic)' : '') + (undecoded ? ' (' + undecoded + ' still analyzing)' : ''), false);
       }
       document.getElementById('btn-autoorder').onclick = planSet;
 
