@@ -565,29 +565,41 @@
     /* sound toggle */
     #sound-toggle {
       position: fixed;
-      top: 18px;
-      right: 18px;
+      top: 16px;
+      right: 16px;
       z-index: 40;
-      width: 40px;
       height: 40px;
-      border-radius: 8px;
-      border: 1px solid #1f3a29;
-      background: rgba(6, 9, 8, 0.7);
+      padding: 0 15px;
+      border-radius: 22px;
+      border: 1px solid var(--green);
+      background: rgba(6, 9, 8, 0.75);
       backdrop-filter: blur(6px);
       color: var(--green);
       font-family: 'Share Tech Mono', monospace;
-      font-size: 16px;
+      font-size: 12px;
+      letter-spacing: 1px;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
+      gap: 8px;
       transition: all .2s ease;
+      animation: soundPulse 2.1s ease-in-out infinite;
     }
 
+    #sound-toggle #sound-ico { font-size: 15px; }
+
     #sound-toggle:hover {
-      border-color: var(--green);
-      box-shadow: 0 0 16px rgba(var(--green-rgb), 0.25);
+      box-shadow: 0 0 18px rgba(var(--green-rgb), 0.4);
+      background: rgba(var(--green-rgb), 0.08);
     }
+
+    /* pulse to draw the eye until it's used */
+    @keyframes soundPulse {
+      0%, 100% { box-shadow: 0 0 0 rgba(var(--green-rgb), 0); }
+      50% { box-shadow: 0 0 20px rgba(var(--green-rgb), 0.45); }
+    }
+
+    #sound-toggle.touched { animation: none; }
 
     /* on-demand matrix overlay (the `matrix` command) */
     #matrix-overlay {
@@ -1190,22 +1202,35 @@
     /* scroll hint */
     #hint {
       position: fixed;
-      bottom: 28px;
+      bottom: 26px;
       left: 50%;
       transform: translateX(-50%);
       font-family: 'Share Tech Mono', monospace;
-      font-size: 12px;
-      color: #3a8f4f;
+      font-size: 13px;
+      color: var(--green);
       letter-spacing: 3px;
       z-index: 30;
       transition: opacity .4s ease;
       text-align: center;
+      padding: 12px 22px;
+      border: 1px solid #1f3a29;
+      border-radius: 30px;
+      background: rgba(6, 9, 8, 0.6);
+      backdrop-filter: blur(6px);
+      text-shadow: 0 0 12px rgba(var(--green-rgb), 0.6);
+      animation: hintGlow 2s ease-in-out infinite;
+    }
+
+    @keyframes hintGlow {
+      0%, 100% { box-shadow: 0 0 0 rgba(var(--green-rgb), 0); border-color: #1f3a29; }
+      50% { box-shadow: 0 0 22px rgba(var(--green-rgb), 0.35); border-color: var(--green); }
     }
 
     #hint .arrow {
       display: block;
       margin-top: 8px;
-      animation: bob 1.6s infinite;
+      font-size: 22px;
+      animation: bob 1.4s infinite;
     }
 
     @keyframes bob {
@@ -1764,7 +1789,7 @@
   <div id="hint">SCROLL TO ENTER<span class="arrow">▼</span></div>
 
   <!-- sound toggle (muted by default) -->
-  <button id="sound-toggle" title="Toggle sound" aria-label="Toggle sound">🔇</button>
+  <button id="sound-toggle" title="Turn sound on" aria-label="Turn sound on"><span id="sound-ico">🔇</span><span id="sound-label">SOUND OFF</span></button>
 
   <!-- on-demand matrix overlay (the `matrix` terminal command) -->
   <div id="matrix-overlay" aria-hidden="true"><canvas id="mtx-canvas"></canvas><div class="mtx-msg" id="mtx-msg"></div></div>
@@ -2499,11 +2524,14 @@
 
       const soundBtn = document.getElementById('sound-toggle');
       if (soundBtn) {
+        const ico = document.getElementById('sound-ico');
+        const label = document.getElementById('sound-label');
         soundBtn.addEventListener('click', function () {
           const on = sfx.toggle();
-          soundBtn.textContent = on ? '🔊' : '🔇';
-          soundBtn.style.color = on ? 'var(--green)' : '';
-          soundBtn.title = on ? 'Sound on — click to mute' : 'Sound off — click for sound';
+          soundBtn.classList.add('touched');   // stop the attention pulse once used
+          ico.textContent = on ? '🔊' : '🔇';
+          label.textContent = on ? 'SOUND ON' : 'SOUND OFF';
+          soundBtn.title = on ? 'Mute sound' : 'Turn sound on';
         });
       }
 
